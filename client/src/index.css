@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-kumon-light text-slate-900 antialiased;
+  }
+
+  ::selection {
+    @apply bg-kumon-blue/15 text-kumon-blue-dark;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-kumon-blue text-white px-5 py-2.5 rounded-xl font-semibold text-sm
+           shadow-sm hover:bg-kumon-blue-dark active:scale-[0.98] transition-all
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-white text-kumon-blue border border-kumon-blue/20 px-5 py-2.5 rounded-xl font-semibold text-sm
+           hover:bg-kumon-blue-light hover:border-kumon-blue/30 active:scale-[0.98] transition-all;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 text-kumon-blue px-4 py-2 rounded-xl font-medium text-sm
+           hover:bg-kumon-blue-light transition-colors;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 text-kumon-red px-3 py-1.5 rounded-lg font-medium text-sm
+           hover:bg-kumon-red-light transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-slate-200/80 p-6;
+  }
+
+  .card-accent {
+    @apply card border-l-4;
+  }
+
+  .input-field {
+    @apply w-full border border-slate-200 bg-white rounded-xl px-4 py-3 text-base text-slate-900 placeholder:text-slate-400
+           focus:outline-none focus:ring-2 focus:ring-kumon-blue/25 focus:border-kumon-blue/40 transition-shadow;
+  }
+
+  .input-field-sm {
+    @apply input-field py-2 text-sm px-3;
+  }
+
+  .label {
+    @apply block text-sm font-semibold text-slate-700 mb-1.5;
+  }
+
+  .page-shell {
+    @apply max-w-5xl mx-auto px-4 py-8 pb-24 md:pb-8;
+  }
+
+  .page-shell-wide {
+    @apply max-w-7xl mx-auto px-4 py-8 pb-24 md:pb-8;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full;
+  }
+
+  .badge-green {
+    @apply badge bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60;
+  }
+
+  .badge-blue {
+    @apply badge bg-kumon-blue-light text-kumon-blue ring-1 ring-kumon-blue/10;
+  }
+
+  .badge-orange {
+    @apply badge bg-orange-50 text-orange-700 ring-1 ring-orange-200/60;
+  }
+
+  .alert {
+    @apply rounded-xl border px-4 py-3 text-sm;
+  }
+
+  .alert-error {
+    @apply alert border-red-200 bg-red-50 text-red-700;
+  }
+
+  .alert-success {
+    @apply alert border-emerald-200 bg-emerald-50 text-emerald-800;
+  }
+
+  .alert-info {
+    @apply alert border-blue-200 bg-blue-50 text-blue-800;
+  }
+
+  .stat-card {
+    @apply card text-center py-5;
+  }
+
+  .nav-link {
+    @apply flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl text-[11px] font-semibold transition-colors min-w-[4.5rem];
+  }
+
+  .nav-link-active {
+    @apply nav-link bg-white/15 text-white;
+  }
+
+  .nav-link-inactive {
+    @apply nav-link text-white/60 hover:text-white hover:bg-white/10;
+  }
+
+  .nav-link-mobile-active {
+    @apply nav-link text-kumon-blue bg-kumon-blue-light;
+  }
+
+  .nav-link-mobile-inactive {
+    @apply nav-link text-slate-500 hover:text-kumon-blue hover:bg-slate-50;
+  }
+
+  .live-dot {
+    @apply w-2 h-2 rounded-full bg-emerald-400 animate-pulse;
+  }
+
+  #qr-reader {
+    border: none !important;
+  }
+
+  #qr-reader img[alt="Info icon"] {
+    display: none;
+  }
+
+  #qr-reader__dashboard_section_csr span,
+  #qr-reader__dashboard_section_swaplink {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  #qr-reader__dashboard_section_csr button,
+  #qr-reader button {
+    background: #003087 !important;
+    border-color: #003087 !important;
+    color: white !important;
+    border-radius: 0.75rem !important;
+  }
+
+  #qr-reader select {
+    background: #1e293b !important;
+    color: white !important;
+    border-color: #334155 !important;
+    border-radius: 0.75rem !important;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

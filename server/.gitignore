@@ -1,0 +1,6 @@
+node_modules/
+kumonscan.db
+kumonscan.db-wal
+kumonscan.db-shm
+.env
+qr-codes/
