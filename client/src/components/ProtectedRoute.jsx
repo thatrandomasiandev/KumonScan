@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
+import { Box, Button, TextField, Typography, Paper } from '@mui/material';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { api } from '../api';
+import LoadingScreen from './LoadingScreen';
+import { md3Colors, getElevatedSurface, shape } from '../theme';
 
 export default function ProtectedRoute({ children }) {
-  const [status, setStatus] = useState({ loading: true, authenticated: false, protectionEnabled: false });
+  const [status, setStatus] = useState({
+    loading: true,
+    authenticated: false,
+    protectionEnabled: false,
+  });
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -10,7 +18,11 @@ export default function ProtectedRoute({ children }) {
   async function checkAuth() {
     try {
       const data = await api.getAuthStatus();
-      setStatus({ loading: false, authenticated: data.authenticated, protectionEnabled: data.protectionEnabled });
+      setStatus({
+        loading: false,
+        authenticated: data.authenticated,
+        protectionEnabled: data.protectionEnabled,
+      });
     } catch {
       setStatus({ loading: false, authenticated: false, protectionEnabled: true });
     }
@@ -36,48 +48,81 @@ export default function ProtectedRoute({ children }) {
     }
   }
 
-  if (status.loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400">Checking access...</p>
-      </div>
-    );
-  }
+  if (status.loading) return <LoadingScreen message="Checking access..." />;
 
-  if (status.authenticated) {
-    return children;
-  }
+  if (status.authenticated) return children;
 
   return (
-    <div className="max-w-md mx-auto px-4 py-16">
-      <div className="card">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">Admin Access Required</h2>
-        <p className="text-gray-500 text-sm mb-6">
-          Enter the admin password to continue.
-        </p>
+    <Box
+      sx={{
+        maxWidth: 960,
+        mx: 'auto',
+        px: 2,
+        py: 4,
+        pb: { xs: 12, md: 4 },
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '60vh',
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          maxWidth: 400,
+          width: '100%',
+          p: 3,
+          borderRadius: `${shape.extraLarge}px`,
+          bgcolor: getElevatedSurface(1),
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+          <Box
+            sx={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              bgcolor: md3Colors.primaryContainer,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <LockOutlinedIcon sx={{ fontSize: 40, color: md3Colors.primary }} />
+          </Box>
+        </Box>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <input
+        <Typography variant="headlineSmall" sx={{ textAlign: 'center', mb: 0.5 }}>
+          Sign in
+        </Typography>
+        <Typography
+          variant="bodyMedium"
+          sx={{ textAlign: 'center', color: md3Colors.onSurfaceVariant, mb: 3 }}
+        >
+          Enter the admin password to view this page.
+        </Typography>
+
+        <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            id="admin-password"
+            label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Admin password"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-kumon-blue/30"
             autoComplete="current-password"
             required
+            fullWidth
+            error={Boolean(error)}
+            helperText={error || ' '}
           />
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
-          <button type="submit" className="btn-primary w-full" disabled={submitting}>
-            {submitting ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
-    </div>
+          <Button type="submit" variant="contained" fullWidth disabled={submitting}>
+            {submitting ? 'Signing in...' : 'Continue'}
+          </Button>
+        </Box>
+      </Paper>
+    </Box>
   );
 }

@@ -1,9 +1,18 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, 'kumonscan.db');
+
+// DATA_DIR mounts a persistent volume in production (e.g. Railway /data).
+const dataDir = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : __dirname;
+
+fs.mkdirSync(dataDir, { recursive: true });
+
+const dbPath = path.join(dataDir, 'kumonscan.db');
 
 const db = new Database(dbPath);
 
@@ -100,6 +109,46 @@ function migrateStudentsTable() {
       ADD COLUMN registered_at TEXT NOT NULL DEFAULT (datetime('now'))
     `);
   }
+
+  const afterRegistered = getStudentColumns();
+  if (!afterRegistered.includes('enrolled_subjects')) {
+    db.exec(`
+      ALTER TABLE students
+      ADD COLUMN enrolled_subjects TEXT NOT NULL DEFAULT 'both'
+    `);
+  }
+  if (!afterRegistered.includes('schedule_days')) {
+    db.exec(`ALTER TABLE students ADD COLUMN schedule_days TEXT`);
+  }
+  if (!afterRegistered.includes('parent_phone')) {
+    db.exec(`ALTER TABLE students ADD COLUMN parent_phone TEXT`);
+  }
+}
+
+function getSessionColumns() {
+  return db.prepare('PRAGMA table_info(sessions)').all().map((col) => col.name);
+}
+
+function migrateSessionsTable() {
+  const tableExists = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+    .get();
+
+  if (!tableExists) return;
+
+  const columns = getSessionColumns();
+  if (!columns.includes('subjects')) {
+    db.exec(`
+      ALTER TABLE sessions
+      ADD COLUMN subjects TEXT NOT NULL DEFAULT 'both'
+    `);
+  }
+  if (!columns.includes('allowance_minutes')) {
+    db.exec(`
+      ALTER TABLE sessions
+      ADD COLUMN allowance_minutes INTEGER NOT NULL DEFAULT 60
+    `);
+  }
 }
 
 migrateStudentsTable();
@@ -111,6 +160,8 @@ db.exec(`
     check_in_time TEXT NOT NULL,
     check_out_time TEXT,
     duration_minutes REAL,
+    subjects TEXT NOT NULL DEFAULT 'both',
+    allowance_minutes INTEGER NOT NULL DEFAULT 60,
     FOREIGN KEY (student_id) REFERENCES students(id)
   );
 
@@ -119,5 +170,7 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_students_name_ci
     ON students(LOWER(first_name), LOWER(last_name));
 `);
+
+migrateSessionsTable();
 
 export default db;

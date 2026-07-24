@@ -17,10 +17,22 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  scan: (qr_code_value, { force = false } = {}) =>
+  scan: (qr_code_value, { force = false, subjects } = {}) =>
     request('/scan', {
       method: 'POST',
-      body: JSON.stringify({ qr_code_value, force }),
+      body: JSON.stringify({ qr_code_value, force, subjects }),
+    }),
+
+  checkIn: (student_id, subjects) =>
+    request('/check-in', {
+      method: 'POST',
+      body: JSON.stringify({ student_id, subjects }),
+    }),
+
+  checkOut: ({ student_id, session_id } = {}) =>
+    request('/check-out', {
+      method: 'POST',
+      body: JSON.stringify({ student_id, session_id }),
     }),
 
   register: (first_name, last_name) =>
@@ -33,12 +45,48 @@ export const api = {
 
   getPresent: () => request('/present'),
 
+  getCompletedToday: () => request('/completed-today'),
+
+  getAbsent: (date) => {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return request(`/absent${qs}`);
+  },
+
+  getAttendanceReport: ({ period = 'monthly', month } = {}) => {
+    const params = new URLSearchParams({ period });
+    if (month) params.set('month', month);
+    return request(`/reports/attendance?${params.toString()}`);
+  },
+
+  downloadAttendanceCsv: async ({ period = 'monthly', month } = {}) => {
+    const params = new URLSearchParams({ period, format: 'csv' });
+    if (month) params.set('month', month);
+    const response = await fetch(`${API_BASE}/reports/attendance?${params.toString()}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      `kumonscan-attendance-${period}.csv`;
+    return { blob, filename };
+  },
+
   getStudentSessions: (id) => request(`/students/${id}/sessions`),
 
-  createStudent: (first_name, last_name) =>
+  createStudent: (first_name, last_name, { enrolled_subjects } = {}) =>
     request('/students', {
       method: 'POST',
-      body: JSON.stringify({ first_name, last_name }),
+      body: JSON.stringify({ first_name, last_name, enrolled_subjects }),
+    }),
+
+  updateStudent: (id, fields) =>
+    request(`/students/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
     }),
 
   deactivateStudent: (id) =>

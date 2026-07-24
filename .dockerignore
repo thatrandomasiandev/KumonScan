@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.git
+.claude
+.cursor
+.impeccable
+*.db
+*.db-wal
+*.db-shm
+server/qr-codes
+server/.env
+client/dist
+.DS_Store

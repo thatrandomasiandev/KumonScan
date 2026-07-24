@@ -8,7 +8,214 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
+import {
+  Box,
+  Typography,
+  TextField,
+  Paper,
+  List,
+  ListItemButton,
+  ListItemAvatar,
+  ListItemText,
+  Avatar,
+  Chip,
+  Collapse,
+  Divider,
+  Button,
+  ToggleButton,
+  ToggleButtonGroup,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+} from '@mui/material';
+import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
+import ExpandLessOutlinedIcon from '@mui/icons-material/ExpandLessOutlined';
+import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import { api, formatTime, formatDate, formatDuration } from '../api';
+import PageHeader from '../components/PageHeader';
+import LoadingScreen from '../components/LoadingScreen';
+import { useSnackbar } from '../components/SnackbarProvider';
+import { md3Colors, getElevatedSurface, shape } from '../theme';
+
+function currentMonthValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function AttendanceReports() {
+  const { showSnackbar } = useSnackbar();
+  const [period, setPeriod] = useState('monthly');
+  const [month, setMonth] = useState(currentMonthValue);
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  async function loadReport() {
+    setLoading(true);
+    try {
+      const data = await api.getAttendanceReport({ period, month });
+      setReport(data);
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const { blob, filename } = await api.downloadAttendanceCsv({ period, month });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      showSnackbar('CSV downloaded');
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  const previewRows = (report?.students || []).filter((s) => s.visits > 0 || s.active);
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mb: 3,
+        borderRadius: `${shape.extraLarge}px`,
+        bgcolor: md3Colors.surfaceBright,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
+        overflow: 'hidden',
+      }}
+    >
+      <Box sx={{ p: 3, borderBottom: `1px solid ${md3Colors.outlineVariant}` }}>
+        <Typography variant="titleLarge" sx={{ mb: 0.5 }}>
+          Attendance reports
+        </Typography>
+        <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 2, display: 'block' }}>
+          Monthly or rolling 12-month CSV for Excel / Sheets
+        </Typography>
+
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: 2,
+            alignItems: { sm: 'flex-end' },
+            flexWrap: 'wrap',
+          }}
+        >
+          <ToggleButtonGroup
+            exclusive
+            value={period}
+            onChange={(_e, next) => {
+              if (next) setPeriod(next);
+            }}
+            aria-label="Report period"
+            sx={{
+              gap: 1,
+              '& .MuiToggleButtonGroup-grouped': {
+                border: `1px solid ${md3Colors.outlineVariant} !important`,
+                borderRadius: `${shape.medium}px !important`,
+                textTransform: 'none',
+                px: 2,
+                py: 1,
+                color: md3Colors.onSurfaceVariant,
+                '&.Mui-selected': {
+                  bgcolor: md3Colors.primaryContainer,
+                  color: md3Colors.onPrimaryContainer,
+                  borderColor: `${md3Colors.primary} !important`,
+                },
+              },
+            }}
+          >
+            <ToggleButton value="monthly">Monthly</ToggleButton>
+            <ToggleButton value="annual">Annual (12 mo)</ToggleButton>
+          </ToggleButtonGroup>
+
+          <TextField
+            label={period === 'annual' ? 'Ending month' : 'Month'}
+            type="month"
+            size="small"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            sx={{ width: { xs: '100%', sm: 200 } }}
+          />
+
+          <Button variant="contained" onClick={loadReport} disabled={loading || !month}>
+            {loading ? 'Loading…' : 'Preview'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handleDownload}
+            disabled={downloading || !month}
+          >
+            {downloading ? 'Downloading…' : 'Download CSV'}
+          </Button>
+        </Box>
+      </Box>
+
+      {report && (
+        <Box sx={{ p: 3 }}>
+          <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant, mb: 2 }}>
+            {report.start_date} → {report.end_date} · {report.summary.total_visits} visits ·{' '}
+            {report.summary.total_minutes} min · {report.summary.overtime_sessions} overtime sessions
+          </Typography>
+
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small" aria-label="Attendance report preview">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Student</TableCell>
+                  <TableCell align="right">Visits</TableCell>
+                  <TableCell align="right">Minutes</TableCell>
+                  <TableCell align="right">Overtime</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {previewRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant, py: 2 }}>
+                        No attendance in this range
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  previewRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        {row.name}
+                        {!row.active && (
+                          <Typography component="span" variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, ml: 1 }}>
+                            (inactive)
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">{row.visits}</TableCell>
+                      <TableCell align="right">{row.total_minutes}</TableCell>
+                      <TableCell align="right">{row.overtime_count}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        </Box>
+      )}
+    </Paper>
+  );
+}
 
 function SessionChart({ dailySessions }) {
   const chartData = dailySessions.map((d) => ({
@@ -21,27 +228,39 @@ function SessionChart({ dailySessions }) {
 
   if (chartData.length === 0) {
     return (
-      <p className="text-gray-400 text-sm py-4 text-center">No sessions in the last 30 days</p>
+      <Box
+        sx={{
+          py: 4,
+          textAlign: 'center',
+          bgcolor: md3Colors.surfaceVariant,
+          borderRadius: `${shape.medium}px`,
+        }}
+      >
+        <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+          No sessions in the last 30 days
+        </Typography>
+      </Box>
     );
   }
 
   return (
     <ResponsiveContainer width="100%" height={160}>
       <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+        <CartesianGrid strokeDasharray="3 3" stroke={md3Colors.outlineVariant} />
+        <XAxis dataKey="date" tick={{ fontSize: 11, fill: md3Colors.onSurfaceVariant }} />
+        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: md3Colors.onSurfaceVariant }} />
         <Tooltip />
-        <Bar dataKey="sessions" fill="#003087" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="sessions" fill={md3Colors.primary} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-function StudentRow({ student, timezone }) {
+function StudentListItem({ student, timezone }) {
   const [expanded, setExpanded] = useState(false);
   const [sessions, setSessions] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { stats } = student;
 
   async function toggle() {
     if (!expanded && !sessions) {
@@ -58,79 +277,130 @@ function StudentRow({ student, timezone }) {
     setExpanded(!expanded);
   }
 
-  const { stats } = student;
+  const initials = student.name
+    .split(' ')
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <>
-      <tr
-        className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
-          stats.isRegular ? 'bg-blue-50/50' : ''
-        }`}
+      <ListItemButton
         onClick={toggle}
+        sx={{
+          minHeight: 72,
+          px: 2,
+          '&:hover': { bgcolor: 'rgba(26,27,34,0.08)' },
+        }}
       >
-        <td className="px-4 py-3 font-medium text-gray-900">
-          <div className="flex items-center gap-2">
-            {student.name}
-            {stats.isRegular && (
-              <span className="text-xs bg-kumon-blue text-white px-2 py-0.5 rounded-full">
-                Regular
-              </span>
-            )}
-          </div>
-        </td>
-        <td className="px-4 py-3 text-gray-600 text-center">{stats.totalVisits}</td>
-        <td className="px-4 py-3 text-gray-600 text-center">
-          {formatDuration(stats.avgDurationMinutes)}
-        </td>
-        <td className="px-4 py-3 text-gray-600">
-          {stats.lastVisit ? formatDate(stats.lastVisit, timezone) : '—'}
-        </td>
-        <td className="px-4 py-3 text-gray-400 text-center">
-          {expanded ? '▲' : '▼'}
-        </td>
-      </tr>
-      {expanded && (
-        <tr>
-          <td colSpan={5} className="px-4 py-4 bg-gray-50">
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-semibold text-sm text-gray-700 mb-3">
-                  Session History
-                </h4>
-                {loading ? (
-                  <p className="text-gray-400 text-sm">Loading...</p>
-                ) : sessions?.length === 0 ? (
-                  <p className="text-gray-400 text-sm">No sessions yet</p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {sessions?.map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex justify-between text-sm bg-white rounded-lg px-3 py-2 border border-gray-100"
-                      >
-                        <span className="text-gray-600">
-                          {formatTime(s.check_in_time, timezone)}
-                        </span>
-                        <span className="text-gray-400">
-                          {s.check_out_time
-                            ? formatDuration(s.duration_minutes)
-                            : 'In progress'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm text-gray-700 mb-3">
-                  Sessions — Last 30 Days
-                </h4>
-                <SessionChart dailySessions={student.dailySessions || []} />
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
+        <ListItemAvatar>
+          <Avatar
+            sx={{
+              bgcolor: stats.isCheckedIn ? md3Colors.tertiaryContainer : md3Colors.surfaceVariant,
+              color: stats.isCheckedIn ? md3Colors.tertiary : md3Colors.onSurfaceVariant,
+              width: 40,
+              height: 40,
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            {initials}
+          </Avatar>
+        </ListItemAvatar>
+        <ListItemText
+          primary={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="titleSmall">{student.name}</Typography>
+              {stats.isCheckedIn && (
+                <Chip
+                  label="Here"
+                  size="small"
+                  sx={{
+                    bgcolor: md3Colors.tertiaryContainer,
+                    color: md3Colors.tertiary,
+                    height: 24,
+                    fontSize: '11px',
+                  }}
+                />
+              )}
+              {stats.isRegular && (
+                <Chip
+                  label="Regular"
+                  size="small"
+                  sx={{
+                    bgcolor: md3Colors.secondaryContainer,
+                    color: md3Colors.onSecondaryContainer,
+                    height: 24,
+                    fontSize: '11px',
+                  }}
+                />
+              )}
+            </Box>
+          }
+          secondary={
+            <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+              {stats.totalVisits} visits · avg {formatDuration(stats.avgDurationMinutes)} · last{' '}
+              {stats.lastVisit ? formatDate(stats.lastVisit, timezone) : '—'}
+            </Typography>
+          }
+        />
+        {expanded ? (
+          <ExpandLessOutlinedIcon sx={{ color: md3Colors.onSurfaceVariant }} />
+        ) : (
+          <ExpandMoreOutlinedIcon sx={{ color: md3Colors.onSurfaceVariant }} />
+        )}
+      </ListItemButton>
+      <Collapse in={expanded}>
+        <Box sx={{ px: 2, pb: 2, bgcolor: getElevatedSurface(1) }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { md: '1fr 1fr' }, gap: 3, pt: 2 }}>
+            <Box>
+              <Typography variant="titleMedium" sx={{ mb: 1.5 }}>
+                Session History
+              </Typography>
+              {loading ? (
+                <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  Loading...
+                </Typography>
+              ) : sessions?.length === 0 ? (
+                <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  No sessions yet
+                </Typography>
+              ) : (
+                <List disablePadding dense>
+                  {sessions?.map((s) => (
+                    <Box
+                      key={s.id}
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        py: 1,
+                        px: 1.5,
+                        borderRadius: `${shape.small}px`,
+                        '&:hover': { bgcolor: 'rgba(26,27,34,0.04)' },
+                      }}
+                    >
+                      <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+                        {formatTime(s.check_in_time, timezone)}
+                      </Typography>
+                      <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                        {s.check_out_time ? formatDuration(s.duration_minutes) : 'In progress'}
+                      </Typography>
+                    </Box>
+                  ))}
+                </List>
+              )}
+            </Box>
+            <Box>
+              <Typography variant="titleMedium" sx={{ mb: 1.5 }}>
+                Sessions, Last 30 Days
+              </Typography>
+              <SessionChart dailySessions={student.dailySessions || []} />
+            </Box>
+          </Box>
+        </Box>
+      </Collapse>
+      <Divider sx={{ ml: 2, borderColor: md3Colors.outlineVariant }} />
     </>
   );
 }
@@ -153,96 +423,138 @@ export default function DashboardPage() {
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400">Loading dashboard...</p>
-      </div>
-    );
-  }
+  if (loading) return <LoadingScreen message="Loading dashboard..." />;
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-red-500">{error}</p>
-      </div>
+      <Box sx={{ maxWidth: 1280, mx: 'auto', px: 2, py: 4, display: 'flex', justifyContent: 'center' }}>
+        <Typography variant="bodyMedium" sx={{ color: md3Colors.error }}>
+          {error}
+        </Typography>
+      </Box>
     );
   }
 
   const { summary, timezone } = data;
 
+  const stats = [
+    { label: 'Active students', value: summary.totalActiveStudents },
+    { label: 'Sessions today', value: summary.totalSessionsToday },
+    { label: 'Currently here', value: summary.currentlyCheckedIn },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Dashboard</h2>
-        <p className="text-gray-500 text-sm">
-          Attendance overview · {timezone}
-        </p>
-      </div>
+    <Box sx={{ maxWidth: 1280, mx: 'auto', px: { xs: 2, md: 3 }, py: { xs: 3, md: 4 }, pb: { xs: 12, md: 4 } }}>
+      <PageHeader title="Dashboard" subtitle={`Attendance overview · ${timezone}`} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-kumon-blue">
-            {summary.totalActiveStudents}
-          </p>
-          <p className="text-gray-500 text-sm mt-1">Active Students</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-kumon-blue">
-            {summary.totalSessionsToday}
-          </p>
-          <p className="text-gray-500 text-sm mt-1">Sessions Today</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-green-600">
-            {summary.currentlyCheckedIn}
-          </p>
-          <p className="text-gray-500 text-sm mt-1">Currently Here</p>
-        </div>
-      </div>
+      <AttendanceReports />
 
-      <div className="card">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <h3 className="font-semibold text-gray-900">All Students</h3>
-          <input
-            type="search"
-            placeholder="Search students..."
+      <Paper
+        elevation={0}
+        className="card-stagger"
+        sx={{
+          mb: 3,
+          borderRadius: `${shape.extraLarge}px`,
+          bgcolor: md3Colors.primaryContainer,
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+          }}
+        >
+          {stats.map((stat, i) => (
+            <Box
+              key={stat.label}
+              sx={{
+                px: 3,
+                py: 2.5,
+                borderBottom: {
+                  xs: i < stats.length - 1 ? `1px solid ${md3Colors.outlineVariant}` : 'none',
+                  sm: 'none',
+                },
+                borderRight: {
+                  xs: 'none',
+                  sm: i < stats.length - 1 ? `1px solid rgba(0, 25, 70, 0.12)` : 'none',
+                },
+              }}
+            >
+              <Typography
+                variant="bodySmall"
+                sx={{ color: md3Colors.onPrimaryContainer, opacity: 0.72, display: 'block', mb: 0.5 }}
+              >
+                {stat.label}
+              </Typography>
+              <Typography
+                variant="displaySmall"
+                sx={{ color: md3Colors.onPrimaryContainer, fontWeight: 500, lineHeight: 1.1 }}
+              >
+                {stat.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
+
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: `${shape.extraLarge}px`,
+          bgcolor: md3Colors.surfaceBright,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { sm: 'center' },
+            justifyContent: 'space-between',
+            gap: 2,
+            p: 3,
+            pb: 2,
+            borderBottom: `1px solid ${md3Colors.outlineVariant}`,
+          }}
+        >
+          <Box>
+            <Typography variant="titleLarge">All students</Typography>
+            <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mt: 0.5 }}>
+              {filtered?.length ?? 0} shown
+            </Typography>
+          </Box>
+          <TextField
+            placeholder="Search by name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-kumon-blue/30"
+            size="small"
+            sx={{ width: { xs: '100%', sm: 280 } }}
+            inputProps={{ 'aria-label': 'Search students' }}
           />
-        </div>
+        </Box>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-gray-500">
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium text-center">Visits</th>
-                <th className="px-4 py-2 font-medium text-center">Avg. Duration</th>
-                <th className="px-4 py-2 font-medium">Last Visit</th>
-                <th className="px-4 py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered?.map((student) => (
-                <StudentRow
-                  key={student.id}
-                  student={student}
-                  timezone={timezone}
-                />
-              ))}
-              {filtered?.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                    No students found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+        {filtered?.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8, px: 3 }}>
+            <BarChartOutlinedIcon
+              sx={{ fontSize: 64, color: md3Colors.outlineVariant, mb: 2 }}
+            />
+            <Typography variant="bodyLarge" sx={{ color: md3Colors.onSurfaceVariant, mb: 3 }}>
+              No students match that search
+            </Typography>
+            <Button variant="contained" color="secondary" onClick={() => setSearch('')}>
+              Clear search
+            </Button>
+          </Box>
+        ) : (
+          <List disablePadding>
+            {filtered?.map((student) => (
+              <StudentListItem key={student.id} student={student} timezone={timezone} />
+            ))}
+          </List>
+        )}
+      </Paper>
+    </Box>
   );
 }

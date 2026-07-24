@@ -1,32 +1,56 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  Paper,
+  TextField,
+  Typography,
+  AppBar,
+  Toolbar,
+  IconButton,
+} from '@mui/material';
+import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
+import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { api, formatTime } from '../api';
+import { md3Colors, getElevatedSurface, shape } from '../theme';
 
 const QR_OPTIONS = {
   width: 280,
   margin: 2,
-  color: { dark: '#003087', light: '#ffffff' },
+  color: { dark: '#1B6EF3', light: '#ffffff' },
 };
 
 function CheckInResult({ result }) {
   const isCheckIn = result.action === 'checked_in';
 
   return (
-    <div
-      className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
-        isCheckIn
-          ? 'border-green-200 bg-green-50 text-green-800'
-          : 'border-orange-200 bg-orange-50 text-orange-800'
-      }`}
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 1.5,
+        p: 2,
+        borderRadius: `${shape.small}px`,
+        bgcolor: isCheckIn ? md3Colors.successContainer : md3Colors.secondaryContainer,
+        mb: 2,
+      }}
     >
-      <p className="font-semibold">
-        {isCheckIn ? 'Checked in successfully!' : 'Checked out successfully!'}
-      </p>
-      <p className="mt-1 opacity-80">
-        {formatTime(result.timestamp, result.timezone)}
-      </p>
-    </div>
+      <CheckCircleOutlinedIcon
+        sx={{ color: isCheckIn ? md3Colors.success : md3Colors.secondary, mt: 0.25 }}
+      />
+      <Box>
+        <Typography variant="titleSmall">
+          {isCheckIn ? 'Checked in successfully!' : 'Checked out successfully!'}
+        </Typography>
+        <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mt: 0.5 }}>
+          {formatTime(result.timestamp, result.timezone)}
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -76,7 +100,6 @@ function QRResult({ registration, onReset }) {
 
   function downloadQr() {
     if (!qrDataUrl) return;
-
     const link = document.createElement('a');
     link.download = `${registration.first_name}_${registration.last_name}_QR.png`;
     link.href = qrDataUrl;
@@ -85,137 +108,130 @@ function QRResult({ registration, onReset }) {
 
   function printQr() {
     if (!qrDataUrl) return;
-
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!printWindow) return;
 
     const fullName = `${registration.first_name} ${registration.last_name}`;
     printWindow.document.write(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>${fullName} - Kumon QR Code</title>
-    <style>
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: #111827;
-      }
-      img {
-        width: 280px;
-        height: 280px;
-      }
-      h1 {
-        margin: 24px 0 8px;
-        font-size: 28px;
-        font-weight: 700;
-      }
-      p {
-        margin: 0;
-        color: #6b7280;
-        font-size: 16px;
-      }
-    </style>
-  </head>
-  <body>
-    <img src="${qrDataUrl}" alt="QR code for ${fullName}" />
-    <h1>${fullName}</h1>
-    <p>Personal Kumon check-in QR code</p>
-  </body>
-</html>`);
+<html lang="en"><head><meta charset="UTF-8" /><title>${fullName} - Kumon QR</title>
+<style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Roboto,sans-serif;color:#1A1B22}
+img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500}p{margin:0;color:#44464F;font-size:14px}</style></head>
+<body><img src="${qrDataUrl}" alt="QR code" /><h1>${fullName}</h1><p>Personal Kumon check-in QR code</p></body></html>`);
     printWindow.document.close();
     printWindow.focus();
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+    printWindow.onload = () => printWindow.print();
   }
 
-  return (
-    <div className="w-full max-w-md mx-auto text-center">
-      {registration.is_new ? (
-        <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-800 text-sm">
-          You&apos;ve been registered! Save your QR code below.
-        </div>
-      ) : (
-        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-800 text-sm">
-          Welcome back! Here&apos;s your QR code.
-        </div>
-      )}
+  const isCheckedIn = checkInResult?.action === 'checked_in';
 
-      <div className="card flex flex-col items-center">
+  return (
+    <Paper
+      elevation={0}
+      className="cross-fade"
+      sx={{
+        maxWidth: 400,
+        width: '100%',
+        mx: 'auto',
+        p: 3,
+        borderRadius: `${shape.extraLarge}px`,
+        bgcolor: getElevatedSurface(1),
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        textAlign: 'center',
+      }}
+    >
+      <Typography variant="titleLarge" sx={{ mb: 3 }}>
+        {registration.first_name} {registration.last_name}
+      </Typography>
+
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2,
+          borderRadius: `${shape.large}px`,
+          borderColor: md3Colors.outlineVariant,
+          bgcolor: md3Colors.surface,
+          display: 'inline-block',
+          mb: 3,
+        }}
+      >
         <canvas
           ref={canvasRef}
-          className="mx-auto mb-6 rounded-lg"
-          style={{ minWidth: 250, minHeight: 250 }}
+          style={{ minWidth: 250, minHeight: 250, display: 'block' }}
           aria-label={`QR code for ${registration.first_name}`}
         />
+      </Paper>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Welcome, {registration.first_name}!
-        </h2>
-        <p className="text-gray-500 mb-6">
-          This is your personal Kumon check-in QR code.
-        </p>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 1.5,
+          p: 2,
+          borderRadius: `${shape.small}px`,
+          bgcolor: md3Colors.surfaceVariant,
+          mb: 3,
+          textAlign: 'left',
+        }}
+      >
+        <InfoOutlinedIcon sx={{ color: md3Colors.primary, mt: 0.25 }} />
+        <Typography variant="bodyMedium">
+          {registration.is_new
+            ? "You've been registered! Save your QR code below."
+            : "Welcome back! Here's your personal check-in QR code."}
+        </Typography>
+      </Box>
 
-        <button
-          type="button"
-          onClick={handleCheckIn}
-          className="btn-primary w-full py-3 text-base mb-3"
-          disabled={checkingIn}
+      <Button
+        variant="contained"
+        fullWidth
+        onClick={handleCheckIn}
+        disabled={checkingIn}
+        sx={{
+          mb: 2,
+          ...(isCheckedIn && {
+            bgcolor: md3Colors.secondary,
+            '&:hover': { bgcolor: md3Colors.secondary },
+          }),
+        }}
+      >
+        {checkingIn ? 'Processing...' : isCheckedIn ? 'Check Out' : 'Check In Now'}
+      </Button>
+
+      {checkInResult && <CheckInResult result={checkInResult} />}
+      {checkInError && (
+        <Typography variant="bodySmall" sx={{ color: md3Colors.error, mb: 2 }}>
+          {checkInError}
+        </Typography>
+      )}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 3 }}>
+        <Button
+          variant="contained"
+          onClick={downloadQr}
+          disabled={!qrDataUrl}
+          sx={{ bgcolor: md3Colors.primaryContainer, color: md3Colors.onPrimaryContainer, '&:hover': { bgcolor: md3Colors.primaryContainer } }}
         >
-          {checkingIn
-            ? 'Processing...'
-            : checkInResult?.action === 'checked_in'
-              ? 'Check Out'
-              : 'Check In Now'}
-        </button>
+          Download PNG
+        </Button>
+        <Button
+          variant="contained"
+          onClick={printQr}
+          disabled={!qrDataUrl}
+          sx={{ bgcolor: md3Colors.primaryContainer, color: md3Colors.onPrimaryContainer, '&:hover': { bgcolor: md3Colors.primaryContainer } }}
+        >
+          Print
+        </Button>
+      </Box>
 
-        {checkInResult && <CheckInResult result={checkInResult} />}
-
-        {checkInError && (
-          <div className="mt-4 w-full rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 text-sm">
-            {checkInError}
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto mt-4">
-          <button
-            type="button"
-            onClick={downloadQr}
-            className="btn-secondary w-full sm:w-auto"
-            disabled={!qrDataUrl}
-          >
-            Download QR Code
-          </button>
-          <button
-            type="button"
-            onClick={printQr}
-            className="btn-secondary w-full sm:w-auto"
-            disabled={!qrDataUrl}
-          >
-            Print QR Code
-          </button>
-        </div>
-
-        <div className="mt-6 flex flex-col gap-3 w-full">
-          <Link to="/" className="btn-secondary w-full text-center">
-            Open Check-In Scanner
-          </Link>
-          <button
-            type="button"
-            onClick={onReset}
-            className="text-sm text-gray-500 hover:text-kumon-blue"
-          >
-            ← Back · Not you?
-          </button>
-        </div>
-      </div>
-    </div>
+      <Box sx={{ borderTop: `1px solid ${md3Colors.outlineVariant}`, pt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Button component={Link} to="/" variant="outlined" fullWidth>
+          Open Check-In Scanner
+        </Button>
+        <Button variant="text" onClick={onReset} sx={{ color: md3Colors.onSurfaceVariant }}>
+          ← Back · Not you?
+        </Button>
+      </Box>
+    </Paper>
   );
 }
 
@@ -249,108 +265,106 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-kumon-light flex flex-col">
-      <header className="bg-kumon-blue text-white shadow-md">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-          <Link
-            to="/"
-            className="text-sm text-white/80 hover:text-white whitespace-nowrap"
+    <Box sx={{ minHeight: '100vh', bgcolor: md3Colors.background, display: 'flex', flexDirection: 'column' }}>
+      <AppBar
+        position="sticky"
+        elevation={0}
+        sx={{ bgcolor: getElevatedSurface(2), color: md3Colors.onSurface }}
+      >
+        <Toolbar sx={{ maxWidth: 480, mx: 'auto', width: '100%' }}>
+          <IconButton component={Link} to="/" edge="start" aria-label="Back to scan">
+            <ArrowBackOutlinedIcon />
+          </IconButton>
+          <Typography variant="titleLarge" sx={{ flex: 1, textAlign: 'center' }}>
+            Register
+          </Typography>
+          <Box sx={{ width: 40 }} />
+        </Toolbar>
+      </AppBar>
+
+      <Box
+        component="main"
+        sx={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          px: 2,
+          py: 4,
+        }}
+      >
+        {!registration ? (
+          <Paper
+            elevation={0}
+            sx={{
+              maxWidth: 400,
+              width: '100%',
+              p: 3,
+              borderRadius: `${shape.extraLarge}px`,
+              bgcolor: getElevatedSurface(1),
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}
           >
-            ← Check In
-          </Link>
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shrink-0">
-              <span className="text-kumon-blue font-bold text-sm">K</span>
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight">KumonScan</h1>
-              <p className="text-white/70 text-xs truncate">Student Registration Portal</p>
-            </div>
-          </div>
-          <div className="w-16" aria-hidden="true" />
-        </div>
-      </header>
+            <Box
+              sx={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                bgcolor: md3Colors.primaryContainer,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mx: 'auto',
+                mb: 3,
+              }}
+            >
+              <QrCode2OutlinedIcon sx={{ fontSize: 40, color: md3Colors.primary }} />
+            </Box>
 
-      <main className="flex-1 px-4 py-8">
-        <div className="max-w-md mx-auto">
-          {!registration ? (
-            <>
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  Get Your QR Code
-                </h2>
-                <p className="text-gray-500 text-sm">
-                  Enter your name to look up or create your personal check-in QR code.
-                </p>
-              </div>
+            <Typography variant="displaySmall" sx={{ textAlign: 'center', mb: 1 }}>
+              Get Your QR Code
+            </Typography>
+            <Typography
+              variant="bodyMedium"
+              sx={{ textAlign: 'center', color: md3Colors.onSurfaceVariant, mb: 3 }}
+            >
+              Enter your name to look up or create your personal check-in code.
+            </Typography>
 
-              <div className="card">
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div>
-                    <label
-                      htmlFor="first-name"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      First Name
-                    </label>
-                    <input
-                      id="first-name"
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Enter your first name"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-kumon-blue/30"
-                      autoComplete="given-name"
-                      required
-                    />
-                  </div>
+            <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                id="first-name"
+                label="First Name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                autoComplete="given-name"
+                required
+                fullWidth
+              />
+              <TextField
+                id="last-name"
+                label="Last Name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                autoComplete="family-name"
+                required
+                fullWidth
+                error={Boolean(error)}
+                helperText={error || ' '}
+              />
+              <Button type="submit" variant="contained" fullWidth disabled={submitting}>
+                {submitting ? 'Looking up...' : 'Generate QR Code'}
+              </Button>
+            </Box>
 
-                  <div>
-                    <label
-                      htmlFor="last-name"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      Last Name
-                    </label>
-                    <input
-                      id="last-name"
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Enter your last name"
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-kumon-blue/30"
-                      autoComplete="family-name"
-                      required
-                    />
-                  </div>
-
-                  {error && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="btn-primary w-full py-3 text-base"
-                    disabled={submitting}
-                  >
-                    {submitting ? 'Looking up...' : 'Get My QR Code'}
-                  </button>
-                </form>
-              </div>
-
-              <div className="flex flex-col gap-3 mt-6">
-                <Link to="/" className="btn-secondary w-full text-center">
-                  Go to Check-In Scanner
-                </Link>
-              </div>
-            </>
-          ) : (
-            <QRResult registration={registration} onReset={handleReset} />
-          )}
-        </div>
-      </main>
-    </div>
+            <Button component={Link} to="/" variant="outlined" fullWidth sx={{ mt: 2 }}>
+              Go to Check-In Scanner
+            </Button>
+          </Paper>
+        ) : (
+          <QRResult registration={registration} onReset={handleReset} />
+        )}
+      </Box>
+    </Box>
   );
 }
