@@ -1,6 +1,6 @@
 import { parse } from 'csv-parse/sync';
 import { v4 as uuidv4 } from 'uuid';
-import db from './db.js';
+import db, { sqlNow } from './db.js';
 import { normalizeName, validateNameField } from './utils/names.js';
 import { normalizeSubjects } from './sessionRules.js';
 import { normalizeScheduleDaysInput, WEEKDAY_SHORTS } from './timeService.js';
@@ -63,9 +63,14 @@ function firstNonBlankValue(record, keys) {
   return '';
 }
 
-function prepareUpdateStudent({ hasSubjectsColumn, hasDaysColumn, hasActiveColumn }) {
+function prepareUpdateStudent({
+  hasSubjectsColumn,
+  hasSubjectsValue,
+  hasDaysColumn,
+  hasActiveColumn,
+}) {
   const setClauses = [];
-  if (hasSubjectsColumn) setClauses.push('enrolled_subjects = ?');
+  if (hasSubjectsColumn && hasSubjectsValue) setClauses.push('enrolled_subjects = ?');
   if (hasDaysColumn) setClauses.push('schedule_days = ?');
   if (hasActiveColumn) setClauses.push('active = ?');
   setClauses.push("parent_phone = COALESCE(NULLIF(?, ''), parent_phone)");
@@ -81,7 +86,7 @@ function rowLabel(i) {
   return `Row ${i + 2}`;
 }
 
-export function importRosterFromContent(content) {
+export async function importRosterFromContent(content) {
   const detectedDelimiter = detectDelimiter(content);
 
   const rawRecords = parse(content, {
@@ -113,7 +118,7 @@ export function importRosterFromContent(content) {
   const insertStudent = db.prepare(
     `INSERT INTO students
        (first_name, last_name, qr_code_value, active, enrolled_subjects, schedule_days, parent_phone, registered_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const normalizedHeaderSet = new Set(
@@ -130,12 +135,6 @@ export function importRosterFromContent(content) {
     'home phone',
   ]);
 
-  const updateStudent = prepareUpdateStudent({
-    hasSubjectsColumn,
-    hasDaysColumn,
-    hasActiveColumn,
-  });
-
   const summary = {
     created: 0,
     updated: 0,
@@ -143,73 +142,80 @@ export function importRosterFromContent(content) {
     errored: [],
   };
 
-  const runImport = db.transaction((records) => {
-    for (let i = 0; i < records.length; i++) {
-      const normalized = normalizeHeaders(records[i]);
-      const label = rowLabel(i);
+  for (let i = 0; i < rawRecords.length; i++) {
+    const normalized = normalizeHeaders(rawRecords[i]);
+    const label = rowLabel(i);
 
-      try {
-        const rawFirst = normalized['first name'] ?? normalized['firstname'] ?? '';
-        const rawLast = normalized['last name'] ?? normalized['lastname'] ?? '';
+    try {
+      const rawFirst = normalized['first name'] ?? normalized['firstname'] ?? '';
+      const rawLast = normalized['last name'] ?? normalized['lastname'] ?? '';
 
-        const firstError = validateNameField(rawFirst, 'First name');
-        if (firstError) {
-          summary.skipped.push({ row: label, reason: `First name invalid — ${firstError}` });
-          continue;
-        }
-
-        const lastError = validateNameField(rawLast, 'Last name');
-        if (lastError) {
-          summary.skipped.push({ row: label, reason: `Last name invalid — ${lastError}` });
-          continue;
-        }
-
-        const { first_name, last_name } = normalizeName(rawFirst, rawLast);
-        const enrolled_subjects = normalizeSubjects(normalized['subjects'] ?? '') || 'both';
-
-        const days = parseDaysCell(normalized['days'] ?? '');
-        const schedule_days = JSON.stringify(normalizeScheduleDaysInput(days));
-        const active = parseActiveCell(normalized['active'] ?? '') ? 1 : 0;
-
-        const parent_phone = hasPhoneColumn
-          ? firstNonBlankValue(normalized, [
-              'phone',
-              'mother cell phone',
-              'father cell phone',
-              'home phone',
-            ])
-          : '';
-
-        const existing = findByName.get(first_name, last_name);
-
-        if (existing) {
-          const params = [];
-          if (hasSubjectsColumn) params.push(enrolled_subjects);
-          if (hasDaysColumn) params.push(schedule_days);
-          if (hasActiveColumn) params.push(active);
-          params.push(parent_phone, existing.id);
-          updateStudent.run(...params);
-          summary.updated++;
-        } else {
-          const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
-          insertStudent.run(
-            first_name,
-            last_name,
-            qr_code_value,
-            active,
-            enrolled_subjects,
-            schedule_days,
-            parent_phone || null
-          );
-          summary.created++;
-        }
-      } catch (err) {
-        summary.errored.push({ row: label, error: err.message });
+      const firstError = validateNameField(rawFirst, 'First name');
+      if (firstError) {
+        summary.skipped.push({ row: label, reason: `First name invalid — ${firstError}` });
+        continue;
       }
-    }
-  });
 
-  runImport(rawRecords);
+      const lastError = validateNameField(rawLast, 'Last name');
+      if (lastError) {
+        summary.skipped.push({ row: label, reason: `Last name invalid — ${lastError}` });
+        continue;
+      }
+
+      const { first_name, last_name } = normalizeName(rawFirst, rawLast);
+      const subjectsCell = String(normalized['subjects'] ?? '').trim();
+      const hasSubjectsValue = subjectsCell !== '';
+      const enrolled_subjects = hasSubjectsValue
+        ? normalizeSubjects(subjectsCell) || 'both'
+        : 'both';
+
+      const days = parseDaysCell(normalized['days'] ?? '');
+      const schedule_days = JSON.stringify(normalizeScheduleDaysInput(days));
+      const active = parseActiveCell(normalized['active'] ?? '') ? 1 : 0;
+
+      const parent_phone = hasPhoneColumn
+        ? firstNonBlankValue(normalized, [
+            'phone',
+            'mother cell phone',
+            'father cell phone',
+            'home phone',
+          ])
+        : '';
+
+      const existing = await findByName.get(first_name, last_name);
+
+      if (existing) {
+        const updateStudent = prepareUpdateStudent({
+          hasSubjectsColumn,
+          hasSubjectsValue,
+          hasDaysColumn,
+          hasActiveColumn,
+        });
+        const params = [];
+        if (hasSubjectsColumn && hasSubjectsValue) params.push(enrolled_subjects);
+        if (hasDaysColumn) params.push(schedule_days);
+        if (hasActiveColumn) params.push(active);
+        params.push(parent_phone, existing.id);
+        await updateStudent.run(...params);
+        summary.updated++;
+      } else {
+        const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
+        await insertStudent.run(
+          first_name,
+          last_name,
+          qr_code_value,
+          active,
+          enrolled_subjects,
+          schedule_days,
+          parent_phone || null,
+          sqlNow()
+        );
+        summary.created++;
+      }
+    } catch (err) {
+      summary.errored.push({ row: label, error: err.message });
+    }
+  }
 
   return {
     detectedDelimiter,

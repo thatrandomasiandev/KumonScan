@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { nanoid } from 'nanoid';
-import db from '../db.js';
+import db, {
+  isOpenSessionUniqueViolation,
+  isUniqueViolation,
+  sqlNow,
+} from '../db.js';
 import {
   fetchAuthoritativeTime,
   calculateDurationMinutes,
@@ -11,13 +15,17 @@ import {
   getWeekdayShortForDate,
   groupSessionsByDate,
   isWithinPastDays,
+  monthBounds,
   normalizeScheduleDaysInput,
   parseScheduleDays,
+  rollingAnnualBounds,
 } from '../timeService.js';
 import {
   requireAdmin,
   verifyAdminPassword,
-  getAdminSessionToken,
+  createAdminSession,
+  revokeAdminSession,
+  isValidAdminSession,
   isAdminPasswordConfigured,
 } from '../middleware/auth.js';
 import {
@@ -48,7 +56,22 @@ const registerLimiter = rateLimit({
   message: { error: 'Too many registration attempts. Please try again in a minute.' },
 });
 
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again in a minute.' },
+});
+
 const SCAN_DEDUP_SECONDS = 3;
+
+function alreadyCheckedInError(openSession) {
+  const error = new Error('Student is already checked in');
+  error.code = 'ALREADY_CHECKED_IN';
+  error.openSession = openSession;
+  return error;
+}
 
 function resolveCheckInSubjects(requested, student) {
   const fromRequest = normalizeSubjects(requested);
@@ -67,7 +90,7 @@ async function getAuthoritativeTimeOr503(res) {
   }
 }
 
-function getOpenSession(studentId) {
+async function getOpenSession(studentId) {
   return db
     .prepare(
       `SELECT * FROM sessions
@@ -77,25 +100,32 @@ function getOpenSession(studentId) {
     .get(studentId);
 }
 
-function insertCheckIn(studentId, iso, subjects) {
+async function insertCheckIn(studentId, iso, subjects) {
   const allowance_minutes = allowanceForSubjects(subjects);
-  const result = db
-    .prepare(
-      `INSERT INTO sessions (student_id, check_in_time, subjects, allowance_minutes)
-       VALUES (?, ?, ?, ?)`
-    )
-    .run(studentId, iso, subjects, allowance_minutes);
+  try {
+    const result = await db
+      .prepare(
+        `INSERT INTO sessions (student_id, check_in_time, subjects, allowance_minutes)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(studentId, iso, subjects, allowance_minutes);
 
-  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(result.lastInsertRowid);
+    return await db.prepare('SELECT * FROM sessions WHERE id = ?').get(result.lastInsertRowid);
+  } catch (err) {
+    if (isOpenSessionUniqueViolation(err)) {
+      throw alreadyCheckedInError(await getOpenSession(studentId));
+    }
+    throw err;
+  }
 }
 
-function completeCheckOut(openSession, iso) {
+async function completeCheckOut(openSession, iso) {
   const duration = calculateDurationMinutes(openSession.check_in_time, iso);
-  db.prepare(
+  await db.prepare(
     'UPDATE sessions SET check_out_time = ?, duration_minutes = ? WHERE id = ?'
   ).run(iso, duration, openSession.id);
 
-  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(openSession.id);
+  return await db.prepare('SELECT * FROM sessions WHERE id = ?').get(openSession.id);
 }
 
 function serializeStudent(student) {
@@ -107,8 +137,8 @@ function serializeStudent(student) {
   };
 }
 
-function getStudentStats(studentId) {
-  const completedSessions = db
+async function getStudentStats(studentId) {
+  const completedSessions = await db
     .prepare(
       `SELECT duration_minutes, check_in_time, check_out_time
        FROM sessions
@@ -125,7 +155,7 @@ function getStudentStats(studentId) {
   const avgDuration = totalVisits > 0 ? Math.round((totalDuration / totalVisits) * 10) / 10 : 0;
   const lastVisit = completedSessions[0]?.check_in_time || null;
 
-  const allSessions = db
+  const allSessions = await db
     .prepare('SELECT check_in_time FROM sessions WHERE student_id = ?')
     .all(studentId);
 
@@ -134,7 +164,7 @@ function getStudentStats(studentId) {
   ).length;
 
   const isCheckedIn = Boolean(
-    db
+    await db
       .prepare(
         `SELECT 1 FROM sessions WHERE student_id = ? AND check_out_time IS NULL LIMIT 1`
       )
@@ -151,7 +181,7 @@ function getStudentStats(studentId) {
   };
 }
 
-router.post('/auth/login', (req, res) => {
+router.post('/auth/login', loginLimiter, (req, res) => {
   const { password } = req.body;
 
   if (!isAdminPasswordConfigured()) {
@@ -169,12 +199,13 @@ router.post('/auth/login', (req, res) => {
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
 
-  res.cookie('admin_session', getAdminSessionToken(), cookieOptions);
+  res.cookie('admin_session', createAdminSession(), cookieOptions);
 
   res.json({ authenticated: true, protectionEnabled: true });
 });
 
-router.post('/auth/logout', (_req, res) => {
+router.post('/auth/logout', (req, res) => {
+  revokeAdminSession(req.cookies?.admin_session);
   res.clearCookie('admin_session', {
     httpOnly: true,
     sameSite: 'lax',
@@ -188,14 +219,13 @@ router.get('/auth/status', (req, res) => {
     return res.json({ authenticated: true, protectionEnabled: false });
   }
 
-  const token = getAdminSessionToken();
   res.json({
-    authenticated: req.cookies?.admin_session === token,
+    authenticated: isValidAdminSession(req.cookies?.admin_session),
     protectionEnabled: true,
   });
 });
 
-router.post('/register', registerLimiter, (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const { first_name: rawFirstName, last_name: rawLastName } = req.body;
 
   const firstNameError = validateNameField(rawFirstName, 'First name');
@@ -210,7 +240,7 @@ router.post('/register', registerLimiter, (req, res) => {
 
   const { first_name, last_name } = normalizeName(rawFirstName, rawLastName);
 
-  const existing = db
+  const existing = await db
     .prepare(
       `SELECT * FROM students
        WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
@@ -231,14 +261,14 @@ router.post('/register', registerLimiter, (req, res) => {
   const qr_code_value = nanoid(12);
 
   try {
-    const result = db
+    const result = await db
       .prepare(
         `INSERT INTO students (first_name, last_name, qr_code_value, registered_at)
-         VALUES (?, ?, ?, datetime('now'))`
+         VALUES (?, ?, ?, ?)`
       )
-      .run(first_name, last_name, qr_code_value);
+      .run(first_name, last_name, qr_code_value, sqlNow());
 
-    const student = db
+    const student = await db
       .prepare('SELECT * FROM students WHERE id = ?')
       .get(result.lastInsertRowid);
 
@@ -251,8 +281,8 @@ router.post('/register', registerLimiter, (req, res) => {
       is_new: true,
     });
   } catch (err) {
-    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      const duplicate = db
+    if (isUniqueViolation(err)) {
+      const duplicate = await db
         .prepare(
           `SELECT * FROM students
            WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
@@ -289,7 +319,7 @@ router.post('/scan', async (req, res) => {
     const authoritativeTime = await getAuthoritativeTimeOr503(res);
     if (!authoritativeTime) return;
 
-    const student = db
+    const student = await db
       .prepare('SELECT * FROM students WHERE qr_code_value = ? AND active = 1')
       .get(qr_code_value);
 
@@ -298,9 +328,9 @@ router.post('/scan', async (req, res) => {
     }
 
     const nowMs = new Date(authoritativeTime.iso).getTime();
-    const openSession = getOpenSession(student.id);
+    const openSession = await getOpenSession(student.id);
 
-    const recentCheckout = db
+    const recentCheckout = await db
       .prepare(
         `SELECT * FROM sessions
          WHERE student_id = ? AND check_out_time IS NOT NULL
@@ -321,7 +351,7 @@ router.post('/scan', async (req, res) => {
         action = 'checked_out';
       } else {
         const subjects = resolveCheckInSubjects(rawSubjects, student);
-        session = insertCheckIn(student.id, authoritativeTime.iso, subjects);
+        session = await insertCheckIn(student.id, authoritativeTime.iso, subjects);
         action = 'checked_in';
       }
     } else {
@@ -333,7 +363,7 @@ router.post('/scan', async (req, res) => {
         session = openSession;
         action = 'checked_in';
       } else {
-        session = completeCheckOut(openSession, authoritativeTime.iso);
+        session = await completeCheckOut(openSession, authoritativeTime.iso);
         action = 'checked_out';
       }
     }
@@ -350,6 +380,12 @@ router.post('/scan', async (req, res) => {
       timezone: authoritativeTime.timezone,
     });
   } catch (err) {
+    if (err?.code === 'ALREADY_CHECKED_IN') {
+      return res.status(409).json({
+        error: 'Student is already checked in',
+        session: err.openSession ? enrichOpenSession(err.openSession) : undefined,
+      });
+    }
     console.error('Scan error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -373,7 +409,7 @@ router.post('/check-in', requireAdmin, async (req, res) => {
     const authoritativeTime = await getAuthoritativeTimeOr503(res);
     if (!authoritativeTime) return;
 
-    const student = db
+    const student = await db
       .prepare('SELECT * FROM students WHERE id = ? AND active = 1')
       .get(studentId);
 
@@ -381,7 +417,7 @@ router.post('/check-in', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Student not found or inactive' });
     }
 
-    const openSession = getOpenSession(student.id);
+    const openSession = await getOpenSession(student.id);
     if (openSession) {
       return res.status(409).json({
         error: 'Student is already checked in',
@@ -389,7 +425,7 @@ router.post('/check-in', requireAdmin, async (req, res) => {
       });
     }
 
-    const session = insertCheckIn(student.id, authoritativeTime.iso, subjects);
+    const session = await insertCheckIn(student.id, authoritativeTime.iso, subjects);
 
     res.status(201).json({
       action: 'checked_in',
@@ -404,6 +440,12 @@ router.post('/check-in', requireAdmin, async (req, res) => {
       timezone: authoritativeTime.timezone,
     });
   } catch (err) {
+    if (err?.code === 'ALREADY_CHECKED_IN') {
+      return res.status(409).json({
+        error: 'Student is already checked in',
+        session: err.openSession ? enrichOpenSession(err.openSession) : undefined,
+      });
+    }
     console.error('Check-in error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -427,18 +469,18 @@ router.post('/check-out', requireAdmin, async (req, res) => {
 
     let openSession;
     if (sessionId) {
-      openSession = db
+      openSession = await db
         .prepare('SELECT * FROM sessions WHERE id = ? AND check_out_time IS NULL')
         .get(sessionId);
     } else {
-      openSession = getOpenSession(studentId);
+      openSession = await getOpenSession(studentId);
     }
 
     if (!openSession) {
       return res.status(404).json({ error: 'No open session to check out' });
     }
 
-    const student = db
+    const student = await db
       .prepare('SELECT * FROM students WHERE id = ?')
       .get(openSession.student_id);
 
@@ -446,7 +488,7 @@ router.post('/check-out', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    const session = completeCheckOut(openSession, authoritativeTime.iso);
+    const session = await completeCheckOut(openSession, authoritativeTime.iso);
     const allowance = session.allowance_minutes ?? allowanceForSubjects(session.subjects || 'both');
     const wasOvertime = (session.duration_minutes || 0) > allowance;
 
@@ -474,21 +516,23 @@ router.post('/check-out', requireAdmin, async (req, res) => {
   }
 });
 
-router.get('/students', requireAdmin, (req, res) => {
-  const students = db
+router.get('/students', requireAdmin, async (req, res) => {
+  const students = await db
     .prepare('SELECT * FROM students ORDER BY first_name ASC, last_name ASC')
     .all();
 
-  const enriched = students.map((student) => ({
-    ...serializeStudent(student),
-    stats: getStudentStats(student.id),
-  }));
+  const enriched = await Promise.all(
+    students.map(async (student) => ({
+      ...serializeStudent(student),
+      stats: await getStudentStats(student.id),
+    }))
+  );
 
   res.json(enriched);
 });
 
 router.get('/present', requireAdmin, async (req, res) => {
-  closeStaleOpenSessions();
+  await closeStaleOpenSessions();
 
   let nowMs = Date.now();
   let clockIso = new Date(nowMs).toISOString();
@@ -500,7 +544,7 @@ router.get('/present', requireAdmin, async (req, res) => {
     console.warn('Present clock fallback to host time:', err?.message || err);
   }
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT
          st.id,
@@ -561,9 +605,9 @@ router.get('/present', requireAdmin, async (req, res) => {
 });
 
 /** Completed check-outs for the center's current calendar day. */
-router.get('/completed-today', requireAdmin, (req, res) => {
+router.get('/completed-today', requireAdmin, async (req, res) => {
   const today = getTodayInTimezone();
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT
          st.id,
@@ -580,7 +624,7 @@ router.get('/completed-today', requireAdmin, (req, res) => {
        WHERE ses.check_out_time IS NOT NULL
        ORDER BY ses.check_out_time DESC`
     )
-    .all()
+    .all())
     .filter((row) => getDateInTimezone(row.check_out_time) === today);
 
   const students = rows.map((row) => {
@@ -614,8 +658,8 @@ router.get('/completed-today', requireAdmin, (req, res) => {
   });
 });
 
-router.get('/students/:id/sessions', requireAdmin, (req, res) => {
-  const student = db
+router.get('/students/:id/sessions', requireAdmin, async (req, res) => {
+  const student = await db
     .prepare('SELECT * FROM students WHERE id = ?')
     .get(req.params.id);
 
@@ -623,7 +667,7 @@ router.get('/students/:id/sessions', requireAdmin, (req, res) => {
     return res.status(404).json({ error: 'Student not found' });
   }
 
-  const sessions = db
+  const sessions = await db
     .prepare(
       `SELECT * FROM sessions WHERE student_id = ? ORDER BY check_in_time DESC`
     )
@@ -632,11 +676,11 @@ router.get('/students/:id/sessions', requireAdmin, (req, res) => {
   res.json({
     student: serializeStudent(student),
     sessions,
-    stats: getStudentStats(student.id),
+    stats: await getStudentStats(student.id),
   });
 });
 
-router.post('/students', requireAdmin, (req, res) => {
+router.post('/students', requireAdmin, async (req, res) => {
   const { name, first_name: rawFirstName, last_name: rawLastName, enrolled_subjects: rawEnrolled } =
     req.body;
 
@@ -665,22 +709,22 @@ router.post('/students', requireAdmin, (req, res) => {
   const enrolled_subjects = normalizeSubjects(rawEnrolled) || 'both';
   const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO students (first_name, last_name, qr_code_value, enrolled_subjects, registered_at)
-       VALUES (?, ?, ?, ?, datetime('now'))`
+       VALUES (?, ?, ?, ?, ?)`
     )
-    .run(first_name, last_name, qr_code_value, enrolled_subjects);
+    .run(first_name, last_name, qr_code_value, enrolled_subjects, sqlNow());
 
-  const student = db
+  const student = await db
     .prepare('SELECT * FROM students WHERE id = ?')
     .get(result.lastInsertRowid);
 
   res.status(201).json(serializeStudent(student));
 });
 
-router.patch('/students/:id', requireAdmin, (req, res) => {
-  const student = db
+router.patch('/students/:id', requireAdmin, async (req, res) => {
+  const student = await db
     .prepare('SELECT * FROM students WHERE id = ?')
     .get(req.params.id);
 
@@ -726,14 +770,14 @@ router.patch('/students/:id', requireAdmin, (req, res) => {
   }
 
   values.push(student.id);
-  db.prepare(`UPDATE students SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  await db.prepare(`UPDATE students SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
-  const updated = db.prepare('SELECT * FROM students WHERE id = ?').get(student.id);
+  const updated = await db.prepare('SELECT * FROM students WHERE id = ?').get(student.id);
   res.json(serializeStudent(updated));
 });
 
-router.patch('/students/:id/deactivate', requireAdmin, (req, res) => {
-  const student = db
+router.patch('/students/:id/deactivate', requireAdmin, async (req, res) => {
+  const student = await db
     .prepare('SELECT * FROM students WHERE id = ?')
     .get(req.params.id);
 
@@ -741,41 +785,43 @@ router.patch('/students/:id/deactivate', requireAdmin, (req, res) => {
     return res.status(404).json({ error: 'Student not found' });
   }
 
-  db.prepare('UPDATE students SET active = 0 WHERE id = ?').run(req.params.id);
+  await db.prepare('UPDATE students SET active = 0 WHERE id = ?').run(req.params.id);
 
   res.json({ message: 'Student deactivated', id: student.id });
 });
 
-router.get('/dashboard', requireAdmin, (req, res) => {
-  const students = db
+router.get('/dashboard', requireAdmin, async (req, res) => {
+  const students = await db
     .prepare('SELECT * FROM students WHERE active = 1 ORDER BY first_name ASC, last_name ASC')
     .all();
 
-  const enriched = students.map((student) => {
-    const stats = getStudentStats(student.id);
-    const studentSessions = db
-      .prepare(
-        `SELECT check_in_time FROM sessions WHERE student_id = ? ORDER BY check_in_time ASC`
-      )
-      .all(student.id)
-      .filter((s) => isWithinPastDays(s.check_in_time, 30));
+  const enriched = await Promise.all(
+    students.map(async (student) => {
+      const stats = await getStudentStats(student.id);
+      const studentSessions = (await db
+        .prepare(
+          `SELECT check_in_time FROM sessions WHERE student_id = ? ORDER BY check_in_time ASC`
+        )
+        .all(student.id))
+        .filter((s) => isWithinPastDays(s.check_in_time, 30));
 
-    const dailySessions = groupSessionsByDate(studentSessions);
+      const dailySessions = groupSessionsByDate(studentSessions);
 
-    return { ...serializeStudent(student), stats, dailySessions };
-  });
+      return { ...serializeStudent(student), stats, dailySessions };
+    })
+  );
 
   const today = getTodayInTimezone();
-  const allTodaySessions = db
+  const allTodaySessions = (await db
     .prepare('SELECT check_in_time FROM sessions')
-    .all()
+    .all())
     .filter((s) => getDateInTimezone(s.check_in_time) === today);
 
-  const activeNow = db
+  const activeNow = (await db
     .prepare(
       `SELECT COUNT(*) as count FROM sessions WHERE check_out_time IS NULL`
     )
-    .get().count;
+    .get()).count;
 
   res.json({
     students: enriched,
@@ -792,7 +838,7 @@ router.get('/dashboard', requireAdmin, (req, res) => {
  * Students scheduled for the given date who never checked in.
  * Query: ?date=YYYY-MM-DD (defaults to center today).
  */
-router.get('/absent', requireAdmin, (req, res) => {
+router.get('/absent', requireAdmin, async (req, res) => {
   const date = req.query.date || getTodayInTimezone();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
@@ -805,7 +851,7 @@ router.get('/absent', requireAdmin, (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
-  const activeStudents = db
+  const activeStudents = await db
     .prepare('SELECT * FROM students WHERE active = 1 ORDER BY first_name ASC, last_name ASC')
     .all();
 
@@ -815,9 +861,9 @@ router.get('/absent', requireAdmin, (req, res) => {
   });
 
   const checkedInIds = new Set(
-    db
+    (await db
       .prepare('SELECT student_id, check_in_time FROM sessions')
-      .all()
+      .all())
       .filter((s) => getDateInTimezone(s.check_in_time) === date)
       .map((s) => s.student_id)
   );
@@ -852,71 +898,47 @@ router.get('/absent', requireAdmin, (req, res) => {
   });
 });
 
-function monthBounds(monthYyyyMm) {
-  if (!/^\d{4}-\d{2}$/.test(monthYyyyMm)) {
-    throw new Error('month must be YYYY-MM');
-  }
-  const [y, m] = monthYyyyMm.split('-').map(Number);
-  if (m < 1 || m > 12) throw new Error('month must be YYYY-MM');
-  const start = `${monthYyyyMm}-01`;
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const end = `${monthYyyyMm}-${String(lastDay).padStart(2, '0')}`;
-  return { start, end };
-}
-
-function rollingAnnualBounds(endMonthYyyyMm) {
-  const { end } = monthBounds(endMonthYyyyMm);
-  const [y, m] = endMonthYyyyMm.split('-').map(Number);
-  let startY = y;
-  let startM = m - 11;
-  while (startM < 1) {
-    startM += 12;
-    startY -= 1;
-  }
-  const startMonth = `${startY}-${String(startM).padStart(2, '0')}`;
-  const { start } = monthBounds(startMonth);
-  return { start, end };
-}
-
-function buildAttendanceReport({ period, month }) {
+async function buildAttendanceReport({ period, month }) {
   const bounds =
     period === 'annual' ? rollingAnnualBounds(month) : monthBounds(month);
 
-  const students = db
+  const students = await db
     .prepare('SELECT * FROM students ORDER BY first_name ASC, last_name ASC')
     .all();
 
-  const rows = students.map((student) => {
-    const sessions = db
-      .prepare(
-        `SELECT check_in_time, duration_minutes, subjects, allowance_minutes
-         FROM sessions
-         WHERE student_id = ? AND check_out_time IS NOT NULL`
-      )
-      .all(student.id)
-      .filter((s) => {
-        const d = getDateInTimezone(s.check_in_time);
-        return d >= bounds.start && d <= bounds.end;
-      });
+  const rows = await Promise.all(
+    students.map(async (student) => {
+      const sessions = (await db
+        .prepare(
+          `SELECT check_in_time, duration_minutes, subjects, allowance_minutes
+           FROM sessions
+           WHERE student_id = ? AND check_out_time IS NOT NULL`
+        )
+        .all(student.id))
+        .filter((s) => {
+          const d = getDateInTimezone(s.check_in_time);
+          return d >= bounds.start && d <= bounds.end;
+        });
 
-    const visits = sessions.length;
-    const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-    const overtimeCount = sessions.filter((s) => {
-      const allowance = s.allowance_minutes ?? allowanceForSubjects(s.subjects || 'both');
-      return (s.duration_minutes || 0) > allowance;
-    }).length;
+      const visits = sessions.length;
+      const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+      const overtimeCount = sessions.filter((s) => {
+        const allowance = s.allowance_minutes ?? allowanceForSubjects(s.subjects || 'both');
+        return (s.duration_minutes || 0) > allowance;
+      }).length;
 
-    return {
-      id: student.id,
-      first_name: student.first_name,
-      last_name: student.last_name,
-      name: formatFullName(student),
-      active: Boolean(student.active),
-      visits,
-      total_minutes: Math.round(totalMinutes * 10) / 10,
-      overtime_count: overtimeCount,
-    };
-  });
+      return {
+        id: student.id,
+        first_name: student.first_name,
+        last_name: student.last_name,
+        name: formatFullName(student),
+        active: Boolean(student.active),
+        visits,
+        total_minutes: Math.round(totalMinutes * 10) / 10,
+        overtime_count: overtimeCount,
+      };
+    })
+  );
 
   return {
     period,
@@ -984,7 +1006,7 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
 
   let report;
   try {
-    report = buildAttendanceReport({ period, month });
+    report = await buildAttendanceReport({ period, month });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -1013,7 +1035,7 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
 });
 
 
-router.post('/admin/roster-import', requireAdmin, (req, res) => {
+router.post('/admin/roster-import', requireAdmin, async (req, res) => {
   const filename = typeof req.body?.filename === 'string' ? req.body.filename : 'roster-upload';
   const content = typeof req.body?.content === 'string' ? req.body.content : '';
 
@@ -1026,7 +1048,7 @@ router.post('/admin/roster-import', requireAdmin, (req, res) => {
   }
 
   try {
-    const result = importRosterFromContent(content);
+    const result = await importRosterFromContent(content);
     const { summary, totalProcessed, delimiterLabel, sourceColumns } = result;
     const anomalies = summary.skipped.length + summary.errored.length;
 
@@ -1055,7 +1077,7 @@ router.post('/admin/roster-import', requireAdmin, (req, res) => {
  * body: { days: string[], scope: 'missing' | 'all_active' }
  * Kumon CRM exports often omit days; this fills schedules so absences work.
  */
-router.post('/admin/schedule-bulk', requireAdmin, (req, res) => {
+router.post('/admin/schedule-bulk', requireAdmin, async (req, res) => {
   const days = normalizeScheduleDaysInput(req.body?.days);
   if (!days.length) {
     return res.status(400).json({
@@ -1066,7 +1088,7 @@ router.post('/admin/schedule-bulk', requireAdmin, (req, res) => {
   const scope = req.body?.scope === 'all_active' ? 'all_active' : 'missing';
   const payload = JSON.stringify(days);
 
-  const active = db
+  const active = await db
     .prepare('SELECT id, schedule_days FROM students WHERE active = 1')
     .all();
 
@@ -1077,12 +1099,12 @@ router.post('/admin/schedule-bulk', requireAdmin, (req, res) => {
   });
 
   const update = db.prepare('UPDATE students SET schedule_days = ? WHERE id = ?');
-  const run = db.transaction((rows) => {
+  const run = db.transaction(async (rows) => {
     for (const row of rows) {
-      update.run(payload, row.id);
+      await update.run(payload, row.id);
     }
   });
-  run(targets);
+  await run(targets);
 
   res.json({
     ok: true,

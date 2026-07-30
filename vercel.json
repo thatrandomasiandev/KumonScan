@@ -1,0 +1,15 @@
+{
+  "installCommand": "npm install --prefix server && npm install --prefix client --include=dev",
+  "buildCommand": "cd client && npx vite build",
+  "outputDirectory": "client/dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/health", "destination": "/api" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30,
+      "includeFiles": "server/**"
+    }
+  }
+}

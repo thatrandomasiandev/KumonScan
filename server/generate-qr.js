@@ -12,23 +12,30 @@ if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir);
 }
 
-const students = db.prepare('SELECT * FROM students WHERE active = 1').all();
+async function main() {
+  const students = await db.prepare('SELECT * FROM students WHERE active = 1').all();
 
-console.log(`Generating QR codes for ${students.length} students...\n`);
+  console.log(`Generating QR codes for ${students.length} students...\n`);
 
-for (const student of students) {
-  const fullName = formatFullName(student);
-  const filename = path.join(
-    outputDir,
-    `${fullName.replace(/\s+/g, '_')}_${student.qr_code_value}.png`
-  );
-  await QRCode.toFile(filename, student.qr_code_value, {
-    width: 400,
-    margin: 2,
-    color: { dark: '#003087', light: '#ffffff' },
-  });
-  console.log(`  ✓ ${fullName} → ${student.qr_code_value}`);
+  for (const student of students) {
+    const fullName = formatFullName(student);
+    const filename = path.join(
+      outputDir,
+      `${fullName.replace(/\s+/g, '_')}_${student.qr_code_value}.png`
+    );
+    await QRCode.toFile(filename, student.qr_code_value, {
+      width: 400,
+      margin: 2,
+      color: { dark: '#003087', light: '#ffffff' },
+    });
+    console.log(`  ✓ ${fullName} → ${student.qr_code_value}`);
+  }
+
+  console.log(`\nQR codes saved to ${outputDir}/`);
+  await db.close();
 }
 
-console.log(`\nQR codes saved to ${outputDir}/`);
-db.close();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

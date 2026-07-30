@@ -15,40 +15,47 @@ const SEED_NAMES = [
   ['Devon', 'Williams'],
 ];
 
-const findByName = db.prepare(
-  `SELECT id, first_name, last_name, active
-   FROM students
-   WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
-);
+async function main() {
+  const findByName = db.prepare(
+    `SELECT id, first_name, last_name, active
+     FROM students
+     WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
+  );
 
-const deactivate = db.prepare(`UPDATE students SET active = 0 WHERE id = ? AND active = 1`);
+  const deactivate = db.prepare(`UPDATE students SET active = 0 WHERE id = ? AND active = 1`);
 
-const summary = { deactivated: [], already_inactive: [], not_found: [] };
+  const summary = { deactivated: [], already_inactive: [], not_found: [] };
 
-for (const [first, last] of SEED_NAMES) {
-  const row = findByName.get(first, last);
-  if (!row) {
-    summary.not_found.push(`${first} ${last}`);
-    continue;
+  for (const [first, last] of SEED_NAMES) {
+    const row = await findByName.get(first, last);
+    if (!row) {
+      summary.not_found.push(`${first} ${last}`);
+      continue;
+    }
+
+    const label = `${row.id} ${row.first_name} ${row.last_name}`;
+    if (!row.active) {
+      summary.already_inactive.push(label);
+      continue;
+    }
+
+    await deactivate.run(row.id);
+    summary.deactivated.push(label);
+    console.log(`Deactivated: ${label}`);
   }
 
-  const label = `${row.id} ${row.first_name} ${row.last_name}`;
-  if (!row.active) {
-    summary.already_inactive.push(label);
-    continue;
+  console.log('\nCleanup summary:');
+  console.log(`  deactivated: ${summary.deactivated.length}`);
+  console.log(`  already_inactive: ${summary.already_inactive.length}`);
+  console.log(`  not_found: ${summary.not_found.length}`);
+  if (summary.not_found.length) {
+    console.log(`  missing: ${summary.not_found.join(', ')}`);
   }
 
-  deactivate.run(row.id);
-  summary.deactivated.push(label);
-  console.log(`Deactivated: ${label}`);
+  await db.close();
 }
 
-console.log('\nCleanup summary:');
-console.log(`  deactivated: ${summary.deactivated.length}`);
-console.log(`  already_inactive: ${summary.already_inactive.length}`);
-console.log(`  not_found: ${summary.not_found.length}`);
-if (summary.not_found.length) {
-  console.log(`  missing: ${summary.not_found.join(', ')}`);
-}
-
-db.close();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

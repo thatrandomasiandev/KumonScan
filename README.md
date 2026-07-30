@@ -15,7 +15,7 @@ QR attendance for Kumon learning centers: per-student codes, kiosk check-in/out,
 | -------- | ----------------------------------- |
 | Frontend | React + Vite + Material Design 3 (MUI) |
 | Backend  | Express.js (Node)                   |
-| Database | SQLite via better-sqlite3           |
+| Database | Neon Postgres (`@neondatabase/serverless`) |
 | QR Scan  | html5-qrcode                        |
 | QR Gen   | qrcode npm package                  |
 | Charts   | Recharts                            |
@@ -32,11 +32,13 @@ cd ../client && npm install
 
 ### 2. Configure environment
 
-Edit `server/.env`:
+Edit `server/.env` (see `server/.env.example`):
 
 ```
 CENTER_TIMEZONE=America/Los_Angeles
 PORT=3001
+ADMIN_PASSWORD=replace-with-a-strong-password
+DATABASE_URL=postgresql://...@...neon.tech/neondb?sslmode=require
 ```
 
 ### 3. Seed sample students
@@ -57,33 +59,28 @@ cd client && npm run dev
 
 Open **http://localhost:5173**
 
-## Deploy (Railway)
+## Deploy (Vercel + Neon)
 
-One process serves the API and the built React SPA over HTTPS (required for camera QR scanning).
-
-1. Re-auth CLI if needed: `railway login`
-2. From repo root: `railway init` (or `railway link`)
-3. Add a volume mounted at `/data` so SQLite survives restarts
-4. Set variables:
-
-```
-NODE_ENV=production
-CENTER_TIMEZONE=America/Los_Angeles
-ADMIN_PASSWORD=<strong-secret>
-DATA_DIR=/data
-```
-
-5. Deploy: `railway up` (or connect the GitHub repo and push)
-
-Health check: `GET /health`. App URL from `railway domain` or the Railway dashboard.
-
-Local production smoke test (no Docker):
+Static SPA on Vercel; `/api` and `/health` run as a serverless Express function. Data lives in Neon Postgres (`DATABASE_URL`).
 
 ```bash
-npm run build --prefix client
-NODE_ENV=production DATA_DIR=/tmp/kumonscan-data node server/index.js
-# open http://localhost:3001
+vercel link
+vercel env add DATABASE_URL
+vercel env add ADMIN_PASSWORD
+vercel env add CENTER_TIMEZONE
+vercel --prod
 ```
+
+Required production env:
+
+```
+DATABASE_URL=postgresql://...@...neon.tech/neondb?sslmode=require
+ADMIN_PASSWORD=<strong-secret>
+CENTER_TIMEZONE=America/Los_Angeles
+NODE_ENV=production
+```
+
+Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `ALLOWED_ORIGINS` only for cross-origin admin clients.
 
 ## Pages
 
@@ -112,13 +109,20 @@ NODE_ENV=production DATA_DIR=/tmp/kumonscan-data node server/index.js
 | PATCH  | `/api/students/:id/deactivate` | Deactivate a student                             |
 | GET    | `/api/dashboard`               | Dashboard summary + charts                       |
 | GET    | `/api/time`                    | Current server-sourced time                      |
+| POST   | `/api/auth/login`              | Admin login (sets httpOnly cookie; rate-limited) |
+| POST   | `/api/auth/logout`             | Clears cookie and revokes the server-side session |
+| GET    | `/api/auth/status`             | Whether the current cookie is a valid admin session |
 
 ## Check-In / Check-Out Logic
 
 1. **Desk:** staff picks a roster name, selects Math / Reading / Both, then checks in. Allowance is 30 minutes for one subject and 60 minutes for both. Overtime rows turn red and show `+N min`.
 2. **QR kiosk:** first scan of the day checks in (subjects default to the student's enrolled subjects, or both); second scan while checked in checks out.
-3. timeapi.io unreachable: check-in/out rejected with error (no session written)
+3. timeapi.io unreachable or slow (>5s): check-in/out rejected with error (no session written)
 4. QR duplicate read within 3 seconds: ignored (`SCAN_DEDUP_SECONDS`)
+
+## Auth
+
+Admin routes require `ADMIN_PASSWORD`. Login issues a random httpOnly `admin_session` cookie (7-day server-side expiry). Logout clears the cookie and invalidates that token so replay fails. Login is rate-limited to 10 attempts/minute (same pattern as `/api/register`).
 
 ## Regulars
 

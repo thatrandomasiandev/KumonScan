@@ -16,3 +16,4 @@ invoices/
 # Roster exports — student PII, never commit
 *.csv
 *.tsv
+.vercel
