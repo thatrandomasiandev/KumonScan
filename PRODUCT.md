@@ -18,7 +18,7 @@ Session allowance is 30 minutes for one subject and 60 minutes for both. Open se
 
 Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV (visits, total minutes, overtime count).
 
-Roster sync from the Kumon CRM or Google Calendar is not built yet: staff add students manually in Admin. Vonage parent SMS is deferred.
+Admin accepts CRM roster upload (TSV/CSV). When Vonage is configured (`VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM`), check-out sends a pickup SMS to `parent_phone` if set; SMS failures never block check-out.
 
 ## Brand Personality
 

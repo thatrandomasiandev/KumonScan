@@ -92,6 +92,13 @@ export const api = {
   deactivateStudent: (id) =>
     request(`/students/${id}/deactivate`, { method: 'PATCH' }),
 
+
+  importRoster: ({ filename, content }) =>
+    request('/admin/roster-import', {
+      method: 'POST',
+      body: JSON.stringify({ filename, content }),
+    }),
+
   getDashboard: () => request('/dashboard'),
 
   getTime: () => request('/time'),

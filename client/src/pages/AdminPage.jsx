@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import {
   Box,
@@ -20,11 +20,20 @@ import {
   Divider,
   ToggleButton,
   ToggleButtonGroup,
+  InputAdornment,
+  IconButton,
+  CircularProgress,
 } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import ClearOutlinedIcon from '@mui/icons-material/ClearOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import { api, formatTime, formatDuration } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
@@ -310,17 +319,20 @@ function StudentScheduleEditor({ student, onSaved }) {
   const { showSnackbar } = useSnackbar();
   const [enrolled, setEnrolled] = useState(student.enrolled_subjects || 'both');
   const [days, setDays] = useState(() => student.schedule_days || []);
+  const [phone, setPhone] = useState(student.parent_phone || '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEnrolled(student.enrolled_subjects || 'both');
     setDays(student.schedule_days || []);
-  }, [student.id, student.enrolled_subjects, student.schedule_days]);
+    setPhone(student.parent_phone || '');
+  }, [student.id, student.enrolled_subjects, student.schedule_days, student.parent_phone]);
 
   const dirty =
     enrolled !== (student.enrolled_subjects || 'both') ||
     JSON.stringify([...(days || [])].sort()) !==
-      JSON.stringify([...(student.schedule_days || [])].sort());
+      JSON.stringify([...(student.schedule_days || [])].sort()) ||
+    phone.trim() !== (student.parent_phone || '');
 
   function toggleDay(day) {
     setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
@@ -332,8 +344,9 @@ function StudentScheduleEditor({ student, onSaved }) {
       const updated = await api.updateStudent(student.id, {
         enrolled_subjects: enrolled,
         schedule_days: days,
+        parent_phone: phone.trim() || null,
       });
-      showSnackbar(`Saved schedule for ${updated.name}`);
+      showSnackbar(`Saved for ${updated.name}`);
       onSaved?.(updated);
     } catch (err) {
       showSnackbar(err.message);
@@ -389,7 +402,7 @@ function StudentScheduleEditor({ student, onSaved }) {
       <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
         Scheduled days
       </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
         {WEEKDAYS.map((day) => {
           const selected = days.includes(day);
           return (
@@ -411,9 +424,193 @@ function StudentScheduleEditor({ student, onSaved }) {
         })}
       </Box>
 
+      <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
+        Parent / guardian phone
+      </Typography>
+      <TextField
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="e.g. +1 213 555 0100"
+        fullWidth
+        size="small"
+        inputProps={{ inputMode: 'tel' }}
+        InputProps={{
+          startAdornment: (
+            <PhoneOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
+          ),
+        }}
+        helperText="Parent phone for pickup SMS on check-out (Vonage). Optional."
+        sx={{ mb: 3 }}
+      />
+
       <Button variant="contained" onClick={handleSave} disabled={!dirty || saving}>
         {saving ? 'Saving…' : 'Save enrollment'}
       </Button>
+    </Box>
+  );
+}
+
+function StudentSessionHistory({ student }) {
+  const { showSnackbar } = useSnackbar();
+  const [sessions, setSessions] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const load = useCallback(async () => {
+    if (sessions !== null) return;
+    setLoading(true);
+    try {
+      const data = await api.getStudentSessions(student.id);
+      setSessions(data.sessions || []);
+    } catch (err) {
+      showSnackbar(err.message);
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [student.id, sessions, showSnackbar]);
+
+  function handleToggle() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next) load();
+  }
+
+  // Reset when student changes.
+  useEffect(() => {
+    setSessions(null);
+    setExpanded(false);
+  }, [student.id]);
+
+  const timezone = 'America/Los_Angeles';
+
+  return (
+    <Box sx={{ mt: 3 }}>
+      <Box
+        component="button"
+        type="button"
+        onClick={handleToggle}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          width: '100%',
+          border: 'none',
+          background: 'none',
+          p: 0,
+          cursor: 'pointer',
+          mb: expanded ? 1.5 : 0,
+        }}
+        aria-expanded={expanded}
+      >
+        <HistoryOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant }} />
+        <Typography variant="titleSmall" sx={{ flex: 1, textAlign: 'left', color: md3Colors.onSurface }}>
+          Session history
+        </Typography>
+        {sessions !== null && (
+          <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+            {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+          </Typography>
+        )}
+        <Typography variant="bodySmall" sx={{ color: md3Colors.primary, ml: 0.5 }}>
+          {expanded ? 'Hide' : 'Show'}
+        </Typography>
+      </Box>
+
+      {expanded && (
+        <Box>
+          {loading && (
+            <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, py: 2 }}>
+              Loading…
+            </Typography>
+          )}
+          {!loading && sessions !== null && sessions.length === 0 && (
+            <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, py: 2 }}>
+              No sessions recorded yet.
+            </Typography>
+          )}
+          {!loading && sessions && sessions.length > 0 && (
+            <Box
+              sx={{
+                border: `1px solid ${md3Colors.outlineVariant}`,
+                borderRadius: `${shape.medium}px`,
+                overflow: 'hidden',
+              }}
+            >
+              {sessions.slice(0, 50).map((session, i) => {
+                const isOvertime =
+                  session.duration_minutes != null &&
+                  session.allowance_minutes != null &&
+                  session.duration_minutes > session.allowance_minutes;
+                const overtimeMin = isOvertime
+                  ? Math.round(session.duration_minutes - session.allowance_minutes)
+                  : 0;
+                const isOpen = !session.check_out_time;
+
+                return (
+                  <Box
+                    key={session.id}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      px: 2,
+                      py: 1.25,
+                      borderBottom:
+                        i < Math.min(sessions.length, 50) - 1
+                          ? `1px solid ${md3Colors.outlineVariant}`
+                          : 'none',
+                      bgcolor: isOpen ? md3Colors.tertiaryContainer : 'transparent',
+                    }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="bodySmall" noWrap>
+                        {formatTime(session.check_in_time, timezone)}
+                      </Typography>
+                      <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                        {session.subjects_label || session.subjects || 'Session'}
+                        {session.check_out_time
+                          ? ` → ${new Date(session.check_out_time).toLocaleTimeString('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: true })}`
+                          : ' · open'}
+                      </Typography>
+                    </Box>
+                    {isOpen ? (
+                      <Chip
+                        size="small"
+                        label="Open"
+                        sx={{ bgcolor: md3Colors.tertiaryContainer, color: md3Colors.tertiary, fontWeight: 500 }}
+                      />
+                    ) : (
+                      <Chip
+                        size="small"
+                        icon={isOvertime ? <WarningAmberOutlinedIcon /> : undefined}
+                        label={
+                          isOvertime
+                            ? `${formatDuration(session.duration_minutes)} (+${overtimeMin}m)`
+                            : formatDuration(session.duration_minutes)
+                        }
+                        sx={{
+                          bgcolor: isOvertime ? md3Colors.errorContainer : md3Colors.surfaceVariant,
+                          color: isOvertime ? md3Colors.onErrorContainer : md3Colors.onSurfaceVariant,
+                          fontWeight: 500,
+                          '& .MuiChip-icon': { color: 'inherit' },
+                        }}
+                      />
+                    )}
+                  </Box>
+                );
+              })}
+              {sessions.length > 50 && (
+                <Box sx={{ px: 2, py: 1, bgcolor: md3Colors.surfaceVariant }}>
+                  <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                    Showing 50 of {sessions.length} sessions. Export CSV from Dashboard for full history.
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -431,6 +628,11 @@ export default function AdminPage() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
+  const [rosterQuery, setRosterQuery] = useState('');
+  const [showInactive, setShowInactive] = useState(false);
+  const [rosterImporting, setRosterImporting] = useState(false);
+  const [rosterImportResult, setRosterImportResult] = useState(null);
+  const [rosterImportError, setRosterImportError] = useState('');
   const { showSnackbar } = useSnackbar();
 
   async function loadData() {
@@ -455,6 +657,36 @@ export default function AdminPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const filteredStudents = useMemo(() => {
+    const q = rosterQuery.trim().toLowerCase();
+    return students.filter((student) => {
+      if (!showInactive && !student.active) return false;
+      if (!q) return true;
+      return (
+        student.name.toLowerCase().includes(q) ||
+        student.first_name?.toLowerCase().includes(q) ||
+        student.last_name?.toLowerCase().includes(q) ||
+        student.qr_code_value?.toLowerCase().includes(q)
+      );
+    });
+  }, [students, rosterQuery, showInactive]);
+
+  const inactiveCount = useMemo(
+    () => students.filter((s) => !s.active).length,
+    [students]
+  );
+
+  function selectStudent(student) {
+    setSelectedStudent(student);
+    setShowAddPanel(false);
+  }
+
+  function handleRosterSearchKeyDown(e) {
+    if (e.key !== 'Enter' || filteredStudents.length === 0) return;
+    e.preventDefault();
+    selectStudent(filteredStudents[0]);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) return;
@@ -470,6 +702,7 @@ export default function AdminPage() {
       setFirstName('');
       setLastName('');
       setShowAddPanel(false);
+      setRosterQuery(`${student.first_name} ${student.last_name}`.trim());
       showSnackbar(`${student.name} added successfully`);
       await loadData();
     } catch (err) {
@@ -491,6 +724,39 @@ export default function AdminPage() {
     }
   }
 
+  async function handleRosterFileSelected(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const maxBytes = 8 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setRosterImportError('File is too large. Maximum size is 8MB.');
+      setRosterImportResult(null);
+      return;
+    }
+
+    setRosterImporting(true);
+    setRosterImportError('');
+    setRosterImportResult(null);
+
+    try {
+      const content = await file.text();
+      const result = await api.importRoster({ filename: file.name, content });
+      setRosterImportResult(result);
+      showSnackbar(
+        `Roster imported: ${result.created} created, ${result.updated} updated, ${result.skipped + result.errored} anomalies`
+      );
+      await loadData();
+    } catch (err) {
+      const message = err.message || 'Roster import failed';
+      setRosterImportError(message);
+      showSnackbar(message);
+    } finally {
+      setRosterImporting(false);
+    }
+  }
+
   if (loading) return <LoadingScreen message="Loading admin panel..." />;
 
   return (
@@ -505,12 +771,20 @@ export default function AdminPage() {
         </Typography>
       )}
 
-      <Box sx={{ display: 'flex', gap: 2, minHeight: 480 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          alignItems: 'stretch',
+          minHeight: { md: 'min(70vh, 720px)' },
+          height: { md: 'min(70vh, 720px)' },
+        }}
+      >
         {/* Left pane — student list */}
         <Paper
           elevation={0}
           sx={{
-            width: { xs: '100%', md: 320 },
+            width: { xs: '100%', md: 360 },
             flexShrink: 0,
             borderRadius: `${shape.large}px`,
             bgcolor: getElevatedSurface(1),
@@ -518,25 +792,75 @@ export default function AdminPage() {
             overflow: 'hidden',
             display: { xs: selectedStudent ? 'none' : 'flex', md: 'flex' },
             flexDirection: 'column',
+            minHeight: { xs: 420, md: 0 },
+            maxHeight: { xs: '70vh', md: 'none' },
           }}
         >
-          <Box sx={{ p: 2, borderBottom: `1px solid ${md3Colors.outlineVariant}` }}>
-            <Typography variant="titleMedium">
-              All Students
+          <Box sx={{ p: 2, borderBottom: `1px solid ${md3Colors.outlineVariant}`, flexShrink: 0 }}>
+            <Typography variant="titleMedium" sx={{ mb: 1.5 }}>
+              Students
               <Typography component="span" variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, ml: 1 }}>
-                {students.length}
+                {rosterQuery.trim() || showInactive
+                  ? `${filteredStudents.length} of ${students.length}`
+                  : students.length}
               </Typography>
             </Typography>
+
+            <TextField
+              value={rosterQuery}
+              onChange={(e) => setRosterQuery(e.target.value)}
+              onKeyDown={handleRosterSearchKeyDown}
+              placeholder="Search name or QR code"
+              fullWidth
+              size="small"
+              autoFocus
+              inputProps={{ 'aria-label': 'Search students' }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlinedIcon sx={{ fontSize: 20, color: md3Colors.onSurfaceVariant }} />
+                  </InputAdornment>
+                ),
+                endAdornment: rosterQuery ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="Clear search"
+                      size="small"
+                      onClick={() => setRosterQuery('')}
+                      edge="end"
+                    >
+                      <ClearOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+              helperText="Press Enter to open the top match"
+              sx={{ mb: inactiveCount > 0 ? 1.25 : 0 }}
+            />
+
+            {inactiveCount > 0 && (
+              <Chip
+                size="small"
+                clickable
+                label={showInactive ? `Hide inactive (${inactiveCount})` : `Show inactive (${inactiveCount})`}
+                onClick={() => setShowInactive((v) => !v)}
+                aria-pressed={showInactive}
+                sx={{
+                  bgcolor: showInactive ? md3Colors.primaryContainer : md3Colors.surfaceVariant,
+                  color: showInactive ? md3Colors.onPrimaryContainer : md3Colors.onSurfaceVariant,
+                }}
+              />
+            )}
           </Box>
 
-          <List disablePadding sx={{ flex: 1, overflow: 'auto' }}>
-            {students.map((student) => (
+          <List disablePadding sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+            {filteredStudents.map((student) => (
               <ListItemButton
                 key={student.id}
                 selected={selectedStudent?.id === student.id}
-                onClick={() => setSelectedStudent(student)}
+                onClick={() => selectStudent(student)}
                 sx={{
-                  minHeight: 72,
+                  minHeight: 64,
                   opacity: student.active ? 1 : 0.5,
                   '&.Mui-selected': {
                     bgcolor: md3Colors.primaryContainer,
@@ -552,6 +876,7 @@ export default function AdminPage() {
                   secondary={
                     <Typography variant="bodySmall" sx={{ fontFamily: 'monospace', color: md3Colors.onSurfaceVariant }} noWrap>
                       {student.qr_code_value}
+                      {!student.active ? ' · inactive' : ''}
                     </Typography>
                   }
                 />
@@ -565,11 +890,30 @@ export default function AdminPage() {
                 </Typography>
               </Box>
             )}
+            {students.length > 0 && filteredStudents.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 6, px: 2 }}>
+                <SearchOutlinedIcon sx={{ fontSize: 40, color: md3Colors.outline, mb: 1 }} />
+                <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  No students match “{rosterQuery.trim()}”
+                </Typography>
+                <Button variant="text" onClick={() => setRosterQuery('')} sx={{ mt: 1 }}>
+                  Clear search
+                </Button>
+              </Box>
+            )}
           </List>
         </Paper>
 
         {/* Right pane — detail / add */}
-        <Box sx={{ flex: 1, display: { xs: selectedStudent || showAddPanel ? 'block' : 'none', md: 'block' } }}>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            overflow: 'auto',
+            display: { xs: selectedStudent || showAddPanel ? 'block' : 'none', md: 'block' },
+          }}
+        >
           {showAddPanel || !selectedStudent ? (
             <Paper
               elevation={0}
@@ -580,6 +924,54 @@ export default function AdminPage() {
                 boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
               }}
             >
+              <Typography variant="titleMedium" sx={{ mb: 1 }}>
+                Import Roster
+              </Typography>
+              <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 1.5 }}>
+                Upload a CRM export (.tsv or .csv). Existing students match by first and last name.
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}>
+                <Button
+                  variant="contained"
+                  component="label"
+                  startIcon={rosterImporting ? <CircularProgress size={16} color="inherit" /> : <UploadFileOutlinedIcon />}
+                  disabled={rosterImporting}
+                  sx={{ minWidth: 200 }}
+                >
+                  {rosterImporting ? 'Importing…' : 'Upload roster file'}
+                  <input
+                    hidden
+                    type="file"
+                    accept=".tsv,.csv,text/tab-separated-values,text/csv"
+                    onChange={handleRosterFileSelected}
+                  />
+                </Button>
+                <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  Max 8MB
+                </Typography>
+              </Box>
+              {rosterImportError && (
+                <Typography variant="bodySmall" sx={{ color: md3Colors.error, mb: 1.5 }}>
+                  {rosterImportError}
+                </Typography>
+              )}
+              {rosterImportResult && (
+                <Box
+                  sx={{
+                    mb: 2.5,
+                    p: 1.5,
+                    borderRadius: `${shape.medium}px`,
+                    bgcolor: md3Colors.surfaceVariant,
+                  }}
+                >
+                  <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                    {`Detected ${rosterImportResult.delimiter}. Processed ${rosterImportResult.rows_processed} rows: ${rosterImportResult.created} created, ${rosterImportResult.updated} updated, ${rosterImportResult.skipped} skipped, ${rosterImportResult.errored} errored.`}
+                  </Typography>
+                </Box>
+              )}
+
+              <Divider sx={{ mb: 3, borderColor: md3Colors.outlineVariant }} />
+
               <Typography variant="titleMedium" sx={{ mb: 1 }}>
                 Add New Student
               </Typography>
@@ -715,6 +1107,10 @@ export default function AdminPage() {
                   );
                 }}
               />
+
+              <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
+
+              <StudentSessionHistory student={selectedStudent} />
             </Paper>
           )}
         </Box>

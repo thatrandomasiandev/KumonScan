@@ -6,12 +6,16 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "seed": "node seed.js",
-    "generate-qr": "node generate-qr.js"
+    "generate-qr": "node generate-qr.js",
+    "import-roster": "node importRoster.js",
+    "cleanup-seeds": "node cleanupSeeds.js"
   },
   "dependencies": {
+    "@vonage/server-sdk": "^3.29.0",
     "better-sqlite3": "^11.7.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csv-parse": "^7.0.1",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^8.5.2",

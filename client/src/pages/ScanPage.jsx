@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import {
   Box,
   Typography,
   LinearProgress,
   Button,
   IconButton,
+  TextField,
   Drawer,
   List,
   ListItemButton,
@@ -30,6 +30,7 @@ import { md3Colors, motion, shape } from '../theme';
 const SCAN_COOLDOWN_MS = 3000;
 const SUCCESS_DISMISS_MS = 4000;
 const ERROR_DISMISS_MS = 5000;
+const CAMERA_START_TIMEOUT_MS = 9000;
 
 const GRID = 4;
 
@@ -49,8 +50,14 @@ function useReducedMotion() {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     setReduced(mq.matches);
     const handler = (e) => setReduced(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+
+    // Safari fallback for older MediaQueryList API.
+    mq.addListener(handler);
+    return () => mq.removeListener(handler);
   }, []);
 
   return reduced;
@@ -561,9 +568,13 @@ export default function ScanPage() {
   const [scanError, setScanError] = useState(null);
   const [scanning, setScanning] = useState(true);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [cameraAttemptLabel, setCameraAttemptLabel] = useState('');
+  const [manualCode, setManualCode] = useState('');
   const [timezone, setTimezone] = useState('America/Los_Angeles');
   const [menuOpen, setMenuOpen] = useState(false);
   const scannerRef = useRef(null);
+  const scanSessionRef = useRef(0);
   const processingRef = useRef(false);
   const lastScanRef = useRef({ value: null, at: 0 });
 
@@ -572,6 +583,8 @@ export default function ScanPage() {
     setScanError(null);
     setScanning(true);
     setCameraReady(false);
+    setCameraError('');
+    setCameraAttemptLabel('');
     processingRef.current = false;
   }, []);
 
@@ -597,8 +610,9 @@ export default function ScanPage() {
       setScanning(false);
 
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(() => {});
+        const scanner = scannerRef.current;
         scannerRef.current = null;
+        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
       }
     } catch {
       setScanError(true);
@@ -606,23 +620,109 @@ export default function ScanPage() {
       processingRef.current = false;
 
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(() => {});
+        const scanner = scannerRef.current;
         scannerRef.current = null;
+        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
       }
     }
   }, []);
 
+  const handleManualSubmit = useCallback(
+    (e) => {
+      e.preventDefault();
+      const code = manualCode.trim();
+      if (!code || processingRef.current) return;
+      setScanError(null);
+      handleScan(code);
+    },
+    [manualCode, handleScan]
+  );
+
   useEffect(() => {
     if (!scanning) return;
 
-    const scanner = new Html5QrcodeScanner(
-      'qr-reader',
-      { fps: 10, qrbox: { width: 260, height: 260 }, aspectRatio: 1, showTorchButtonIfSupported: true },
-      false
-    );
+    let cancelled = false;
+    const sessionId = ++scanSessionRef.current;
+    let scanner = null;
+    let Html5QrcodeClass = null;
+    setCameraReady(false);
+    setCameraError('');
+    setCameraAttemptLabel('Starting camera…');
 
-    scannerRef.current = scanner;
-    scanner.render((decodedText) => handleScan(decodedText), () => {});
+    const startConfig = {
+      fps: 10,
+      qrbox: { width: 260, height: 260 },
+      aspectRatio: 1,
+      disableFlip: false,
+      rememberLastUsedCamera: true,
+    };
+
+    const startProfiles = [
+      { label: 'Rear camera', camera: { facingMode: { exact: 'environment' } } },
+      { label: 'Rear camera (fallback)', camera: { facingMode: 'environment' } },
+      { label: 'Front camera', camera: { facingMode: 'user' } },
+    ];
+
+    async function startWithTimeout(cameraConfig, label) {
+      setCameraAttemptLabel(label);
+      await Promise.race([
+        scanner.start(cameraConfig, startConfig, handleScan, () => {}),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Camera startup timed out')), CAMERA_START_TIMEOUT_MS)
+        ),
+      ]);
+    }
+
+    async function bootScanner() {
+      try {
+        const module = await import('html5-qrcode');
+        Html5QrcodeClass = module?.Html5Qrcode;
+        if (!Html5QrcodeClass) {
+          throw new Error('QR scanner library unavailable');
+        }
+
+        scanner = new Html5QrcodeClass('qr-reader', false);
+        scannerRef.current = scanner;
+
+        for (const profile of startProfiles) {
+          if (cancelled || scanSessionRef.current !== sessionId) return;
+          try {
+            await startWithTimeout(profile.camera, profile.label);
+            if (cancelled || scanSessionRef.current !== sessionId) return;
+            setCameraReady(true);
+            setCameraAttemptLabel('');
+            return;
+          } catch {
+            // Continue to next profile.
+          }
+        }
+
+        const cameras = await Html5QrcodeClass.getCameras();
+        for (const camera of cameras) {
+          if (cancelled || scanSessionRef.current !== sessionId) return;
+          try {
+            await startWithTimeout(camera.id, `Trying ${camera.label || 'another camera'}…`);
+            if (cancelled || scanSessionRef.current !== sessionId) return;
+            setCameraReady(true);
+            setCameraAttemptLabel('');
+            return;
+          } catch {
+            // Continue to next device.
+          }
+        }
+
+        throw new Error('No camera configuration could be started');
+      } catch (err) {
+        if (cancelled || scanSessionRef.current !== sessionId) return;
+        setCameraReady(false);
+        setCameraError(
+          'Camera unavailable right now. You can retry camera startup or type your code manually below.'
+        );
+        setCameraAttemptLabel('');
+      }
+    }
+
+    bootScanner();
 
     const observer = new MutationObserver(() => {
       const video = document.querySelector('#qr-reader video');
@@ -632,9 +732,14 @@ export default function ScanPage() {
     if (el) observer.observe(el, { childList: true, subtree: true });
 
     return () => {
+      cancelled = true;
       observer.disconnect();
-      scanner.clear().catch(() => {});
-      scannerRef.current = null;
+      if (scannerRef.current === scanner && scanner) {
+        scannerRef.current = null;
+      }
+      if (scanner) {
+        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
+      }
     };
   }, [scanning, handleScan]);
 
@@ -701,6 +806,80 @@ export default function ScanPage() {
           <ViewfinderCard cameraReady={cameraReady} reducedMotion={reducedMotion}>
             <div id="qr-reader" />
           </ViewfinderCard>
+
+          {cameraAttemptLabel && !cameraReady && !cameraError && (
+            <Typography
+              variant="bodySmall"
+              sx={{ color: md3Colors.onSurfaceVariant, textAlign: 'center', mt: -2 }}
+            >
+              {cameraAttemptLabel}
+            </Typography>
+          )}
+
+          {cameraError && (
+            <Box
+              sx={{
+                width: '100%',
+                maxWidth: 384,
+                p: 2,
+                borderRadius: `${shape.large}px`,
+                bgcolor: md3Colors.errorContainer,
+                border: `1px solid ${md3Colors.error}`,
+              }}
+            >
+              <Typography variant="titleSmall" sx={{ color: md3Colors.onErrorContainer, mb: 0.5 }}>
+                Camera fallback
+              </Typography>
+              <Typography variant="bodySmall" sx={{ color: md3Colors.onErrorContainer, mb: 1.5 }}>
+                {cameraError}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="contained"
+                  onClick={resumeScanning}
+                  sx={{
+                    bgcolor: md3Colors.error,
+                    color: md3Colors.onPrimary,
+                    '&:hover': { bgcolor: md3Colors.error },
+                  }}
+                >
+                  Retry camera
+                </Button>
+                <Button
+                  variant="text"
+                  onClick={() => navigate('/register')}
+                  sx={{ color: md3Colors.onErrorContainer }}
+                >
+                  Get a QR code
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          <Box
+            component="form"
+            onSubmit={handleManualSubmit}
+            sx={{
+              width: '100%',
+              maxWidth: 384,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1.25,
+            }}
+          >
+            <TextField
+              label="Enter code manually"
+              placeholder="e.g. KUMON-17D66DCC"
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              size="small"
+              fullWidth
+              inputProps={{ autoCapitalize: 'characters' }}
+            />
+            <Button type="submit" variant="outlined" disabled={!manualCode.trim() || processingRef.current}>
+              Submit code
+            </Button>
+          </Box>
         </Box>
       </Box>
 

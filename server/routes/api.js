@@ -33,6 +33,8 @@ import {
   SUBJECT_LABELS,
 } from '../sessionRules.js';
 import { v4 as uuidv4 } from 'uuid';
+import { importRosterFromContent } from '../rosterImport.js';
+import { queuePickupSms } from '../smsService.js';
 
 const router = Router();
 
@@ -314,6 +316,7 @@ router.post('/scan', async (req, res) => {
 
     let action;
     let session;
+    let justCheckedOut = false;
 
     if (!openSessionToday) {
       if (!bypassDedup && secondsSinceCheckout < SCAN_DEDUP_SECONDS) {
@@ -335,7 +338,12 @@ router.post('/scan', async (req, res) => {
       } else {
         session = completeCheckOut(openSession, authoritativeTime.iso);
         action = 'checked_out';
+        justCheckedOut = true;
       }
+    }
+
+    if (justCheckedOut) {
+      queuePickupSms(student);
     }
 
     res.json({
@@ -449,6 +457,8 @@ router.post('/check-out', requireAdmin, async (req, res) => {
     const session = completeCheckOut(openSession, authoritativeTime.iso);
     const allowance = session.allowance_minutes ?? allowanceForSubjects(session.subjects || 'both');
     const wasOvertime = (session.duration_minutes || 0) > allowance;
+
+    queuePickupSms(student);
 
     res.json({
       action: 'checked_out',
@@ -986,6 +996,44 @@ router.get('/reports/attendance', requireAdmin, (req, res) => {
   }
 
   res.json(report);
+});
+
+
+router.post('/admin/roster-import', requireAdmin, (req, res) => {
+  const filename = typeof req.body?.filename === 'string' ? req.body.filename : 'roster-upload';
+  const content = typeof req.body?.content === 'string' ? req.body.content : '';
+
+  if (!content.trim()) {
+    return res.status(400).json({ error: 'Roster file content is required' });
+  }
+
+  if (content.length > 8 * 1024 * 1024) {
+    return res.status(413).json({ error: 'Roster file is too large (max 8MB)' });
+  }
+
+  try {
+    const result = importRosterFromContent(content);
+    const { summary, totalProcessed, delimiterLabel, sourceColumns } = result;
+    const anomalies = summary.skipped.length + summary.errored.length;
+
+    res.json({
+      ok: true,
+      filename,
+      delimiter: delimiterLabel,
+      rows_processed: totalProcessed,
+      created: summary.created,
+      updated: summary.updated,
+      skipped: summary.skipped.length,
+      errored: summary.errored.length,
+      skipped_rows: summary.skipped,
+      errored_rows: summary.errored,
+      source_columns: sourceColumns,
+      has_anomalies: anomalies > 0,
+    });
+  } catch (err) {
+    console.error('Roster import error:', err);
+    res.status(400).json({ error: err.message || 'Roster import failed' });
+  }
 });
 
 router.get('/time', async (req, res) => {
