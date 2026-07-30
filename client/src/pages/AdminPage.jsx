@@ -51,8 +51,8 @@ function subjectLabel(value) {
   return SUBJECT_OPTIONS.find((o) => o.value === value)?.label || 'Both';
 }
 
-function elapsedMinutes(checkInTime) {
-  return Math.max(0, Math.round((Date.now() - new Date(checkInTime).getTime()) / 60000));
+function elapsedMinutes(checkInTime, nowMs = Date.now()) {
+  return Math.max(0, Math.round((nowMs - new Date(checkInTime).getTime()) / 60000));
 }
 
 function StudentInitials({ name }) {
@@ -76,7 +76,9 @@ function StudentInitials({ name }) {
 }
 
 function CurrentlyHere({ present, timezone }) {
-  const { students, count, overtime_count: overtimeCount = 0 } = present;
+  const { students, count, overtime_count: overtimeCount = 0, clock_iso: clockIso } = present;
+  const clockSkewMs = clockIso ? new Date(clockIso).getTime() - Date.now() : 0;
+  const nowMs = Date.now() + (Number.isFinite(clockSkewMs) ? clockSkewMs : 0);
 
   return (
     <Paper
@@ -161,7 +163,7 @@ function CurrentlyHere({ present, timezone }) {
           <List disablePadding>
             {students.map((student, i) => {
               const overtime = Boolean(student.is_overtime);
-              const elapsed = student.elapsed_minutes ?? elapsedMinutes(student.check_in_time);
+              const elapsed = student.elapsed_minutes ?? elapsedMinutes(student.check_in_time, nowMs);
               return (
                 <Box
                   key={student.session_id}
@@ -439,7 +441,7 @@ function StudentScheduleEditor({ student, onSaved }) {
             <PhoneOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
           ),
         }}
-        helperText="Parent phone for pickup SMS on check-out (Vonage). Optional."
+        helperText="Optional parent contact for instructors. Not used for automated messages."
         sx={{ mb: 3 }}
       />
 
@@ -633,6 +635,9 @@ export default function AdminPage() {
   const [rosterImporting, setRosterImporting] = useState(false);
   const [rosterImportResult, setRosterImportResult] = useState(null);
   const [rosterImportError, setRosterImportError] = useState('');
+  const [scheduleBulkDays, setScheduleBulkDays] = useState(['Mon', 'Wed', 'Fri']);
+  const [scheduleBulkScope, setScheduleBulkScope] = useState('missing');
+  const [scheduleBulkBusy, setScheduleBulkBusy] = useState(false);
   const { showSnackbar } = useSnackbar();
 
   async function loadData() {
@@ -754,6 +759,28 @@ export default function AdminPage() {
       showSnackbar(message);
     } finally {
       setRosterImporting(false);
+    }
+  }
+
+  async function handleScheduleBulkApply() {
+    if (!scheduleBulkDays.length) {
+      showSnackbar('Pick at least one weekday');
+      return;
+    }
+    setScheduleBulkBusy(true);
+    try {
+      const result = await api.applyScheduleBulk({
+        days: scheduleBulkDays,
+        scope: scheduleBulkScope,
+      });
+      showSnackbar(
+        `Schedules updated for ${result.updated} student${result.updated === 1 ? '' : 's'} (${result.days.join(', ')})`
+      );
+      await loadData();
+    } catch (err) {
+      showSnackbar(err.message || 'Bulk schedule failed');
+    } finally {
+      setScheduleBulkBusy(false);
     }
   }
 
@@ -928,7 +955,9 @@ export default function AdminPage() {
                 Import Roster
               </Typography>
               <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 1.5 }}>
-                Upload a CRM export (.tsv or .csv). Existing students match by first and last name.
+                After Personal Orientations, export students from the Kumon CRM and upload here. This is the
+                roster sync path (CRM has no public API). Name match updates existing students; new names are
+                added. The standard CRM export has no schedule-day column — set days below after import.
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}>
                 <Button
@@ -969,6 +998,73 @@ export default function AdminPage() {
                   </Typography>
                 </Box>
               )}
+
+              <Typography variant="titleMedium" sx={{ mb: 1 }}>
+                Bulk schedule days
+              </Typography>
+              <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 1.5, display: 'block' }}>
+                Required for Desk absences. Apply a weekday pattern to students missing schedules (or overwrite
+                all active).
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                {[
+                  { label: 'MWF', days: ['Mon', 'Wed', 'Fri'] },
+                  { label: 'TTh', days: ['Tue', 'Thu'] },
+                  { label: 'Mon–Fri', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+                ].map((preset) => (
+                  <Chip
+                    key={preset.label}
+                    label={preset.label}
+                    onClick={() => setScheduleBulkDays(preset.days)}
+                    color={
+                      JSON.stringify(scheduleBulkDays) === JSON.stringify(preset.days) ? 'primary' : 'default'
+                    }
+                    variant={
+                      JSON.stringify(scheduleBulkDays) === JSON.stringify(preset.days) ? 'filled' : 'outlined'
+                    }
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={scheduleBulkScope}
+                onChange={(_e, next) => {
+                  if (next) setScheduleBulkScope(next);
+                }}
+                sx={{ mb: 1.5, flexWrap: 'wrap' }}
+              >
+                <ToggleButton value="missing">Only missing schedules</ToggleButton>
+                <ToggleButton value="all_active">All active students</ToggleButton>
+              </ToggleButtonGroup>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                {WEEKDAYS.map((day) => {
+                  const selected = scheduleBulkDays.includes(day);
+                  return (
+                    <Chip
+                      key={day}
+                      label={day}
+                      onClick={() =>
+                        setScheduleBulkDays((prev) =>
+                          selected ? prev.filter((d) => d !== day) : [...prev, day]
+                        )
+                      }
+                      color={selected ? 'primary' : 'default'}
+                      variant={selected ? 'filled' : 'outlined'}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  );
+                })}
+              </Box>
+              <Button
+                variant="contained"
+                onClick={handleScheduleBulkApply}
+                disabled={scheduleBulkBusy || scheduleBulkDays.length === 0}
+                sx={{ mb: 2.5 }}
+              >
+                {scheduleBulkBusy ? 'Applying…' : 'Apply schedule'}
+              </Button>
 
               <Divider sx={{ mb: 3, borderColor: md3Colors.outlineVariant }} />
 

@@ -259,13 +259,14 @@ export default function DeskPage() {
   const [tick, setTick] = useState(0);
   const [absent, setAbsent] = useState(null);
   const [absentLoading, setAbsentLoading] = useState(false);
+  const [clockSkewMs, setClockSkewMs] = useState(0);
 
   const timezone = present.timezone || 'America/Los_Angeles';
 
   const activeRoster = useMemo(() => {
-    // Recompute elapsed client-side between polls so timers stay live.
+    // Recompute elapsed between polls using skew-corrected clock (aligned to timeapi via /present).
     void tick;
-    const now = Date.now();
+    const now = Date.now() + clockSkewMs;
     return (present.students || []).map((s) => {
       const elapsed = Math.max(0, Math.floor((now - new Date(s.check_in_time).getTime()) / 60000));
       const allowance = s.allowance_minutes ?? (s.subjects === 'both' ? 60 : 30);
@@ -280,7 +281,7 @@ export default function DeskPage() {
       if (a.is_overtime !== b.is_overtime) return a.is_overtime ? -1 : 1;
       return b.elapsed_minutes - a.elapsed_minutes;
     });
-  }, [present.students, tick]);
+  }, [present.students, tick, clockSkewMs]);
 
   const overtimeCount = activeRoster.filter((s) => s.is_overtime).length;
 
@@ -302,6 +303,12 @@ export default function DeskPage() {
       setStudents(studentsData);
       setPresent(presentData);
       setCompleted(completedData);
+      if (presentData?.clock_iso) {
+        const serverMs = new Date(presentData.clock_iso).getTime();
+        if (!Number.isNaN(serverMs)) {
+          setClockSkewMs(serverMs - Date.now());
+        }
+      }
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -697,7 +704,7 @@ export default function DeskPage() {
               <PersonOffOutlinedIcon sx={{ fontSize: 40, color: md3Colors.outline, mb: 1 }} />
               <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
                 {absent.unchecked_schedule_count > 0
-                  ? 'No students scheduled for this weekday. Set scheduled days on each student in Admin.'
+                  ? `No students scheduled for ${absent.weekday}. ${absent.unchecked_schedule_count} active students have no schedule days — set days in Admin (or re-upload a CRM export that includes days).`
                   : 'No students are scheduled for today.'}
               </Typography>
             </Box>

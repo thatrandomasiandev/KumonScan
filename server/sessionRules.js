@@ -40,6 +40,14 @@ export function sessionTiming(checkInTime, allowanceMinutes, nowMs = Date.now())
   };
 }
 
+/** Display overage for completed visits (never show +0 when overtime). */
+export function overtimeMinutesDisplay(durationMinutes, allowanceMinutes) {
+  const duration = Number(durationMinutes) || 0;
+  const allowance = Number(allowanceMinutes) || 0;
+  if (!(duration > allowance)) return 0;
+  return Math.max(1, Math.ceil(duration - allowance));
+}
+
 export function enrichOpenSession(row, nowMs = Date.now()) {
   const allowance = row.allowance_minutes ?? allowanceForSubjects(row.subjects || 'both');
   const timing = sessionTiming(row.check_in_time, allowance, nowMs);

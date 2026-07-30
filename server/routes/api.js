@@ -30,11 +30,13 @@ import {
   allowanceForSubjects,
   enrichOpenSession,
   normalizeSubjects,
+  overtimeMinutesDisplay,
   SUBJECT_LABELS,
 } from '../sessionRules.js';
 import { v4 as uuidv4 } from 'uuid';
 import { importRosterFromContent } from '../rosterImport.js';
-import { queuePickupSms } from '../smsService.js';
+import { attendanceReportToPdf } from '../attendancePdf.js';
+import { closeStaleOpenSessions } from '../sessionHygiene.js';
 
 const router = Router();
 
@@ -295,12 +297,8 @@ router.post('/scan', async (req, res) => {
       return res.status(404).json({ error: 'Student not found or inactive' });
     }
 
-    const today = getDateInTimezone(authoritativeTime.iso);
     const nowMs = new Date(authoritativeTime.iso).getTime();
     const openSession = getOpenSession(student.id);
-
-    const openSessionToday =
-      openSession && getDateInTimezone(openSession.check_in_time) === today;
 
     const recentCheckout = db
       .prepare(
@@ -316,9 +314,8 @@ router.post('/scan', async (req, res) => {
 
     let action;
     let session;
-    let justCheckedOut = false;
 
-    if (!openSessionToday) {
+    if (!openSession) {
       if (!bypassDedup && secondsSinceCheckout < SCAN_DEDUP_SECONDS) {
         session = recentCheckout;
         action = 'checked_out';
@@ -338,12 +335,7 @@ router.post('/scan', async (req, res) => {
       } else {
         session = completeCheckOut(openSession, authoritativeTime.iso);
         action = 'checked_out';
-        justCheckedOut = true;
       }
-    }
-
-    if (justCheckedOut) {
-      queuePickupSms(student);
     }
 
     res.json({
@@ -458,8 +450,6 @@ router.post('/check-out', requireAdmin, async (req, res) => {
     const allowance = session.allowance_minutes ?? allowanceForSubjects(session.subjects || 'both');
     const wasOvertime = (session.duration_minutes || 0) > allowance;
 
-    queuePickupSms(student);
-
     res.json({
       action: 'checked_out',
       student: {
@@ -473,9 +463,7 @@ router.post('/check-out', requireAdmin, async (req, res) => {
         subjects_label: SUBJECT_LABELS[session.subjects || 'both'] || 'Both',
         allowance_minutes: allowance,
         is_overtime: wasOvertime,
-        overtime_minutes: wasOvertime
-          ? Math.max(0, Math.round(session.duration_minutes - allowance))
-          : 0,
+        overtime_minutes: overtimeMinutesDisplay(session.duration_minutes, allowance),
       },
       timestamp: authoritativeTime.iso,
       timezone: authoritativeTime.timezone,
@@ -499,8 +487,19 @@ router.get('/students', requireAdmin, (req, res) => {
   res.json(enriched);
 });
 
-router.get('/present', requireAdmin, (req, res) => {
-  const nowMs = Date.now();
+router.get('/present', requireAdmin, async (req, res) => {
+  closeStaleOpenSessions();
+
+  let nowMs = Date.now();
+  let clockIso = new Date(nowMs).toISOString();
+  try {
+    const authoritativeTime = await fetchAuthoritativeTime();
+    nowMs = new Date(authoritativeTime.iso).getTime();
+    clockIso = authoritativeTime.iso;
+  } catch (err) {
+    console.warn('Present clock fallback to host time:', err?.message || err);
+  }
+
   const rows = db
     .prepare(
       `SELECT
@@ -557,6 +556,7 @@ router.get('/present', requireAdmin, (req, res) => {
     count: students.length,
     overtime_count: students.filter((s) => s.is_overtime).length,
     timezone: getCenterTimezone(),
+    clock_iso: clockIso,
   });
 });
 
@@ -602,7 +602,7 @@ router.get('/completed-today', requireAdmin, (req, res) => {
       subjects_label: SUBJECT_LABELS[subjects] || 'Both',
       allowance_minutes: allowance,
       is_overtime: isOvertime,
-      overtime_minutes: isOvertime ? Math.max(0, Math.round(duration - allowance)) : 0,
+      overtime_minutes: overtimeMinutesDisplay(duration, allowance),
     };
   });
 
@@ -972,14 +972,15 @@ function csvEscape(value) {
 }
 
 /**
- * Attendance report: ?period=monthly|annual&month=YYYY-MM&format=json|csv
+ * Attendance report: ?period=monthly|annual&month=YYYY-MM&format=json|csv|pdf
  * Annual = rolling 12 months ending in `month`.
  */
-router.get('/reports/attendance', requireAdmin, (req, res) => {
+router.get('/reports/attendance', requireAdmin, async (req, res) => {
   const period = req.query.period === 'annual' ? 'annual' : 'monthly';
   const now = getTodayInTimezone();
   const month = req.query.month || now.slice(0, 7);
-  const format = req.query.format === 'csv' ? 'csv' : 'json';
+  const format =
+    req.query.format === 'csv' ? 'csv' : req.query.format === 'pdf' ? 'pdf' : 'json';
 
   let report;
   try {
@@ -993,6 +994,19 @@ router.get('/reports/attendance', requireAdmin, (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(attendanceReportToCsv(report));
+  }
+
+  if (format === 'pdf') {
+    try {
+      const pdf = await attendanceReportToPdf(report);
+      const filename = `kumonscan-attendance-${period}-${month}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(pdf);
+    } catch (err) {
+      console.error('Attendance PDF error:', err);
+      return res.status(500).json({ error: 'Failed to generate PDF' });
+    }
   }
 
   res.json(report);
@@ -1034,6 +1048,49 @@ router.post('/admin/roster-import', requireAdmin, (req, res) => {
     console.error('Roster import error:', err);
     res.status(400).json({ error: err.message || 'Roster import failed' });
   }
+});
+
+/**
+ * Bulk-set schedule days for active students.
+ * body: { days: string[], scope: 'missing' | 'all_active' }
+ * Kumon CRM exports often omit days; this fills schedules so absences work.
+ */
+router.post('/admin/schedule-bulk', requireAdmin, (req, res) => {
+  const days = normalizeScheduleDaysInput(req.body?.days);
+  if (!days.length) {
+    return res.status(400).json({
+      error: 'days is required (e.g. Mon, Wed, Fri)',
+    });
+  }
+
+  const scope = req.body?.scope === 'all_active' ? 'all_active' : 'missing';
+  const payload = JSON.stringify(days);
+
+  const active = db
+    .prepare('SELECT id, schedule_days FROM students WHERE active = 1')
+    .all();
+
+  const targets = active.filter((student) => {
+    if (scope === 'all_active') return true;
+    const parsed = parseScheduleDays(student.schedule_days);
+    return parsed.length === 0;
+  });
+
+  const update = db.prepare('UPDATE students SET schedule_days = ? WHERE id = ?');
+  const run = db.transaction((rows) => {
+    for (const row of rows) {
+      update.run(payload, row.id);
+    }
+  });
+  run(targets);
+
+  res.json({
+    ok: true,
+    scope,
+    days,
+    updated: targets.length,
+    active_total: active.length,
+  });
 });
 
 router.get('/time', async (req, res) => {

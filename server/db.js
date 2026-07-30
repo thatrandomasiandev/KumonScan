@@ -153,6 +153,9 @@ function migrateSessionsTable() {
 
 migrateStudentsTable();
 
+// Drop abandoned SMS inbox table if present from earlier experiments.
+db.exec(`DROP TABLE IF EXISTS parent_messages`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

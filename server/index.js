@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes/api.js';
+import { closeStaleOpenSessions } from './sessionHygiene.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -41,5 +42,9 @@ if (fs.existsSync(clientDist)) {
 }
 
 app.listen(PORT, '0.0.0.0', () => {
+  const closed = closeStaleOpenSessions();
+  if (closed > 0) {
+    console.log(`Closed ${closed} stale open session(s) from prior days / duplicates`);
+  }
   console.log(`KumonScan server running on http://0.0.0.0:${PORT}`);
 });

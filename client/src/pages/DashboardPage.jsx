@@ -52,6 +52,7 @@ function AttendanceReports() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   async function loadReport() {
     setLoading(true);
@@ -83,6 +84,24 @@ function AttendanceReports() {
     }
   }
 
+  async function handleDownloadPdf() {
+    setDownloadingPdf(true);
+    try {
+      const { blob, filename } = await api.downloadAttendancePdf({ period, month });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      showSnackbar('PDF downloaded');
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   const previewRows = (report?.students || []).filter((s) => s.visits > 0 || s.active);
 
   return (
@@ -101,7 +120,7 @@ function AttendanceReports() {
           Attendance reports
         </Typography>
         <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 2, display: 'block' }}>
-          Monthly or rolling 12-month CSV for Excel / Sheets
+          Monthly or rolling 12-month export (CSV for Sheets, PDF for print)
         </Typography>
 
         <Box
@@ -158,9 +177,17 @@ function AttendanceReports() {
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownload}
-            disabled={downloading || !month}
+            disabled={downloading || downloadingPdf || !month}
           >
             {downloading ? 'Downloading…' : 'Download CSV'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handleDownloadPdf}
+            disabled={downloading || downloadingPdf || !month}
+          >
+            {downloadingPdf ? 'Downloading…' : 'Download PDF'}
           </Button>
         </Box>
       </Box>

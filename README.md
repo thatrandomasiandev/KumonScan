@@ -103,11 +103,12 @@ NODE_ENV=production DATA_DIR=/tmp/kumonscan-data node server/index.js
 | POST   | `/api/check-out`               | Staff desk check-out (student_id or session_id)  |
 | GET    | `/api/present`                 | Open sessions with elapsed time and overtime     |
 | GET    | `/api/absent`                  | Scheduled today but never checked in             |
-| GET    | `/api/reports/attendance`      | Monthly/annual attendance JSON or CSV            |
+| GET    | `/api/reports/attendance`      | Monthly/annual attendance JSON, CSV, or PDF      |
 | GET    | `/api/students`                | List students with stats                         |
 | GET    | `/api/students/:id/sessions`   | Session history for a student                    |
 | POST   | `/api/students`                | Create student + QR code value                   |
-| PATCH  | `/api/students/:id`            | Update enrolled subjects, schedule, phone        |
+| POST   | `/api/admin/roster-import`     | Admin CRM TSV/CSV roster upload                  |
+| POST   | `/api/admin/schedule-bulk`     | Bulk-set schedule days (missing or all active)   |
 | PATCH  | `/api/students/:id/deactivate` | Deactivate a student                             |
 | GET    | `/api/dashboard`               | Dashboard summary + charts                       |
 | GET    | `/api/time`                    | Current server-sourced time                      |

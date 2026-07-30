@@ -75,6 +75,23 @@ export const api = {
     return { blob, filename };
   },
 
+  downloadAttendancePdf: async ({ period = 'monthly', month } = {}) => {
+    const params = new URLSearchParams({ period, format: 'pdf' });
+    if (month) params.set('month', month);
+    const response = await fetch(`${API_BASE}/reports/attendance?${params.toString()}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      `kumonscan-attendance-${period}.pdf`;
+    return { blob, filename };
+  },
+
   getStudentSessions: (id) => request(`/students/${id}/sessions`),
 
   createStudent: (first_name, last_name, { enrolled_subjects } = {}) =>
@@ -97,6 +114,12 @@ export const api = {
     request('/admin/roster-import', {
       method: 'POST',
       body: JSON.stringify({ filename, content }),
+    }),
+
+  applyScheduleBulk: ({ days, scope = 'missing' }) =>
+    request('/admin/schedule-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ days, scope }),
     }),
 
   getDashboard: () => request('/dashboard'),

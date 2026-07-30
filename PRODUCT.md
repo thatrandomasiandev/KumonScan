@@ -16,9 +16,9 @@ KumonScan replaces paper sign-in sheets. Staff check students in from the Desk r
 
 Session allowance is 30 minutes for one subject and 60 minutes for both. Open sessions on Desk and Admin show elapsed time; when elapsed exceeds the allowance, the student row turns red and shows overage minutes (for example +8 min). Checked-out students move to Completed today with total visit minutes.
 
-Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV (visits, total minutes, overtime count).
+Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV or PDF (visits, total minutes, overtime count).
 
-Admin accepts CRM roster upload (TSV/CSV). When Vonage is configured (`VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM`), check-out sends a pickup SMS to `parent_phone` if set; SMS failures never block check-out.
+Admin accepts CRM roster upload (TSV/CSV) as the roster sync path: after Personal Orientation enrollments, staff export from the Kumon CRM and upload in Admin (name match updates; new names are created). The standard CRM export has no schedule-day column; Admin bulk schedule apply sets weekdays (MWF / TTh / Mon–Fri or custom) so Desk absences work. Staff can still edit subjects and days per student. Parent phone is optional contact for instructors; the app does not send automated SMS.
 
 ## Brand Personality
 
