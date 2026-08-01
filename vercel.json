@@ -11,5 +11,8 @@
       "maxDuration": 30,
       "includeFiles": "server/**"
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron/digests", "schedule": "0 16 * * 1" }
+  ]
 }
