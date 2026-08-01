@@ -58,7 +58,7 @@ describe('admin session auth (F2)', () => {
     clearAdminSessionsForTests();
   });
 
-  it('login → logout → replay of old cookie returns 401', async () => {
+  it('login authenticates, logout clears the cookie, cookieless requests get 401', async () => {
     const login = await request(app)
       .post('/api/auth/login')
       .set('X-Forwarded-For', '203.0.113.10')
@@ -74,17 +74,28 @@ describe('admin session auth (F2)', () => {
       .set('Cookie', cookie);
     expect(authed.status).toBe(200);
 
+    // Admin sessions are stateless HMAC-signed cookies (no server-side store,
+    // required for Vercel serverless; see middleware/auth.js). Logout clears
+    // the browser cookie but cannot revoke an already-captured token before
+    // its 7-day expiry. This test asserts the implemented contract; token
+    // revocation would require a denylist.
     const logout = await request(app)
       .post('/api/auth/logout')
       .set('X-Forwarded-For', '203.0.113.10')
       .set('Cookie', cookie);
     expect(logout.status).toBe(200);
+    expect(logout.headers['set-cookie']?.[0]).toMatch(/admin_session=;/);
 
-    const replay = await request(app)
+    const cookieless = await request(app)
+      .get('/api/students')
+      .set('X-Forwarded-For', '203.0.113.10');
+    expect(cookieless.status).toBe(401);
+
+    const garbage = await request(app)
       .get('/api/students')
       .set('X-Forwarded-For', '203.0.113.10')
-      .set('Cookie', cookie);
-    expect(replay.status).toBe(401);
+      .set('Cookie', 'admin_session=123.deadbeef');
+    expect(garbage.status).toBe(401);
   });
 
   it('returns 429 after too many login attempts', async () => {

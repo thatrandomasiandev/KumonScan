@@ -5,13 +5,22 @@ import app from '../app.js';
 import db from '../db.js';
 import { clearAdminSessionsForTests } from '../middleware/auth.js';
 
+// The Neon serverless driver issues its queries via global fetch (to
+// `<host>/sql`), so the timeapi.io stub must pass database traffic through to
+// the real fetch or every query under the stub fails.
+const realFetch = globalThis.fetch;
+
 function stubTimeApi(iso = '2026-07-30T19:00:00.000Z') {
-  vi.stubGlobal('fetch', async (url) => {
-    if (String(url).includes('timeapi.io')) {
+  vi.stubGlobal('fetch', async (url, init) => {
+    const target = String(url);
+    if (target.includes('timeapi.io')) {
       return {
         ok: true,
         json: async () => ({ dateTime: iso }),
       };
+    }
+    if (new URL(target).pathname.endsWith('/sql')) {
+      return realFetch(url, init);
     }
     throw new Error(`Unexpected fetch in test: ${url}`);
   });
@@ -26,15 +35,15 @@ async function loginCookie() {
   return res.headers['set-cookie'];
 }
 
-function insertStudent({ first, last, subjects = 'both', days = null } = {}) {
+async function insertStudent({ first, last, subjects = 'both', days = null } = {}) {
   const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
-  const id = db
+  const { lastInsertRowid: id } = await db
     .prepare(
       `INSERT INTO students
          (first_name, last_name, qr_code_value, active, enrolled_subjects, schedule_days)
        VALUES (?, ?, ?, 1, ?, ?)`
     )
-    .run(first, last, qr, subjects, days).lastInsertRowid;
+    .run(first, last, qr, subjects, days);
   return { id, qr };
 }
 
@@ -43,8 +52,8 @@ describe('API integration', () => {
 
   beforeEach(async () => {
     clearAdminSessionsForTests();
-    db.exec('DELETE FROM sessions');
-    db.exec('DELETE FROM students');
+    await db.exec('DELETE FROM sessions');
+    await db.exec('DELETE FROM students');
     stubTimeApi('2026-07-30T19:00:00.000Z');
     cookie = await loginCookie();
   });
@@ -55,7 +64,7 @@ describe('API integration', () => {
   });
 
   it('check-in → check-out round trip produces correct duration_minutes', async () => {
-    const { id } = insertStudent({ first: 'Round', last: 'Trip', subjects: 'math' });
+    const { id } = await insertStudent({ first: 'Round', last: 'Trip', subjects: 'math' });
 
     const checkIn = await request(app)
       .post('/api/check-in')
@@ -76,7 +85,7 @@ describe('API integration', () => {
   });
 
   it('duplicate check-in returns 409', async () => {
-    const { id } = insertStudent({ first: 'Already', last: 'In', subjects: 'both' });
+    const { id } = await insertStudent({ first: 'Already', last: 'In', subjects: 'both' });
 
     const first = await request(app)
       .post('/api/check-in')
@@ -96,17 +105,17 @@ describe('API integration', () => {
 
   it('/api/absent excludes already-checked-in and no-schedule students', async () => {
     // 2026-07-30 is a Thursday in America/Los_Angeles.
-    const scheduled = insertStudent({
+    const scheduled = await insertStudent({
       first: 'Expected',
       last: 'Absent',
       days: JSON.stringify(['Thu']),
     });
-    const checkedIn = insertStudent({
+    const checkedIn = await insertStudent({
       first: 'Expected',
       last: 'Present',
       days: JSON.stringify(['Thu']),
     });
-    insertStudent({
+    await insertStudent({
       first: 'No',
       last: 'Schedule',
       days: null,
