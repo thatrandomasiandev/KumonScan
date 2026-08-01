@@ -11,6 +11,7 @@ import MessagesPanel from './components/MessagesPanel';
 import InsightsPage from './pages/InsightsPage'; // agent-7-insights
 import BookingPage from './pages/BookingPage'; // agent-3-self-scheduling
 import StatusPage from './pages/StatusPage'; // agent-observability
+import ParentApp from './parent/ParentApp'; // agent-13-parent-pwa
 import { setCenterSlug } from './api';
 import { DEFAULT_CENTER_SLUG } from './centerPath';
 
@@ -103,6 +104,9 @@ export default function App() {
       <Route path="/" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}`} replace />} />
       <Route path="/register" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/register`} replace />} />
       <Route path="/desk" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/desk`} replace />} />
+      {/* agent-13-parent-pwa: parent PWA, global (magic-link auth carries the
+          student's tenancy; parentApi talks to the unslugged default-center API). */}
+      <Route path="/family/*" element={<ParentApp />} />
       <Route
         path="/dashboard"
         element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/dashboard`} replace />}
