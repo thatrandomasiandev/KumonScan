@@ -68,6 +68,46 @@ async function runSeed({ databaseUrl, demoMode }) {
   }
 }
 
+/**
+ * The shared test branch may already carry the multi-tenant schema from a
+ * sibling branch's runs (students.center_id NOT NULL). Adapt like the other
+ * agents' suites do: detect the column and supply a center row when present.
+ */
+async function insertSentinelStudent() {
+  const centerIdColumn = await rows(
+    realSql,
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'center_id'`
+  );
+
+  if (centerIdColumn.length === 0) {
+    await rows(
+      realSql,
+      `INSERT INTO students (first_name, last_name, qr_code_value, registered_at)
+       VALUES ($1, $2, $3, $4)`,
+      ['Isolation', 'Sentinel', 'REAL-SENTINEL-1', new Date().toISOString()]
+    );
+    return;
+  }
+
+  let [center] = await rows(realSql, 'SELECT id FROM centers ORDER BY id ASC LIMIT 1');
+  if (!center) {
+    [center] = await rows(
+      realSql,
+      `INSERT INTO centers (slug, name, timezone, created_at)
+       VALUES ('demo-seed-test', 'Demo Seed Test Center', 'America/Los_Angeles', $1)
+       RETURNING id`,
+      [new Date().toISOString()]
+    );
+  }
+  await rows(
+    realSql,
+    `INSERT INTO students (center_id, first_name, last_name, qr_code_value, registered_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [center.id, 'Isolation', 'Sentinel', 'REAL-SENTINEL-1', new Date().toISOString()]
+  );
+}
+
 async function ensureDemoDatabaseExists() {
   neonConfig.webSocketConstructor = globalThis.WebSocket;
   // CREATE DATABASE cannot run over the HTTP driver's implicit transaction;
@@ -92,14 +132,10 @@ describe('demo seed', () => {
     // in-process connection can never point at the demo database.
     const { ensureDb } = await import('../db.js');
     await ensureDb();
-    await rows(realSql, 'DELETE FROM sessions');
-    await rows(realSql, 'DELETE FROM students');
-    await rows(
-      realSql,
-      `INSERT INTO students (first_name, last_name, qr_code_value, registered_at)
-       VALUES ($1, $2, $3, $4)`,
-      ['Isolation', 'Sentinel', 'REAL-SENTINEL-1', new Date().toISOString()]
-    );
+    // CASCADE: sibling branches' runs may have left tables referencing
+    // students (sms_queue etc.) on the shared test branch.
+    await rows(realSql, 'TRUNCATE TABLE sessions, students RESTART IDENTITY CASCADE');
+    await insertSentinelStudent();
   }, 120_000);
 
   afterAll(async () => {
