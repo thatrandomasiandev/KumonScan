@@ -226,6 +226,31 @@ export const api = {
     request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
 
   logout: () => request('/auth/logout', { method: 'POST' }),
+
+  // agent-10-data-portability
+  downloadFullExport: async () => {
+    const response = await fetch(`${apiBase()}/export/full`, { credentials: 'include' });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      'kumonscan-export.zip';
+    return { blob, filename };
+  },
+
+  // agent-10-data-portability
+  listWebhooks: () => request('/webhooks'),
+
+  createWebhook: ({ url, event_types }) =>
+    request('/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({ url, event_types }),
+    }),
+
+  deleteWebhook: (id) => request(`/webhooks/${id}`, { method: 'DELETE' }),
 };
 
 export function formatTime(isoString, timezone) {

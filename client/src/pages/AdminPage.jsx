@@ -41,6 +41,7 @@ import { api, formatTime, formatDuration } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import StaffPanel from '../components/StaffPanel';
+import DataPortabilityPanel from '../components/DataPortabilityPanel'; // agent-10-data-portability
 import { useSnackbar } from '../components/SnackbarProvider';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
@@ -908,7 +909,13 @@ export default function AdminPage() {
         <Tab label="Staff & center" value="staff" />
       </Tabs>
 
-      {activeTab === 'staff' && <StaffPanel timezone={present?.timezone} />}
+      {activeTab === 'staff' && (
+        <>
+          <StaffPanel timezone={present?.timezone} />
+          {/* agent-10-data-portability */}
+          <DataPortabilityPanel />
+        </>
+      )}
 
       {activeTab === 'students' && present && (
         <CurrentlyHere present={present} timezone={present.timezone} />
