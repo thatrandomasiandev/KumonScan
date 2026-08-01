@@ -84,6 +84,16 @@ Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `AL
 
 In production, admin routes return 503 if `ADMIN_PASSWORD` is unset (auth fails closed). JSON bodies are capped at 256kb except `/api/admin/roster-import` (8mb). `/api/scan` is rate-limited to 60 requests per minute per IP.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`, in three parallel jobs:
+
+- **Server tests:** spins up a fresh `postgres:16` service container plus an HTTP/WebSocket proxy (`local-neon-http-proxy`) that lets the `@neondatabase/serverless` driver reach it. `server/scripts/ci-migrate.js` runs `ensureDb()` against that container (and refuses any `*.neon.tech` host), then `vitest run --config vitest.ci.config.js` executes the suite. No CI run touches the shared Neon test branch; each run's database is created and destroyed with the job.
+- **Client build:** `npm ci && npm run build` in `client/`. A build error fails the check.
+- **Marketing site build:** same, in `marketing-site/` when that directory is present on the ref.
+
+Preview deploys come from Vercel's Git integration (configured via `vercel.json`), not from Actions.
+
 ## Parent SMS gateway
 
 Check-in and check-out enqueue a parent text in the `sms_queue` table (skipped when the student has no parent phone). A dedicated Android phone running `gateway-app/` sends the texts:
