@@ -17,3 +17,7 @@ invoices/
 *.csv
 *.tsv
 .vercel
+
+# Live cross-worktree agent coordination state (ledger + locks), never versioned.
+# The single shared copy lives in the primary checkout; see .cursor/rules/multi-agent-protocol.mdc
+.agent-coordination/
