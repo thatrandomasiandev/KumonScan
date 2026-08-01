@@ -60,6 +60,8 @@ export const api = {
       body: JSON.stringify({ first_name, last_name, preferred_language }),
     }),
 
+  getSystemStatus: () => request('/status'),
+
   getStudents: () => request('/students'),
 
   getPresent: () => request('/present'),

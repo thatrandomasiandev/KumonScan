@@ -18,6 +18,7 @@ import {
   attendanceReportToCsv,
   payrollReportToCsv,
 } from '../services/reportService.js';
+import { captureError } from '../services/errorReportingService.js';
 import { buildPayrollReport } from '../services/staffService.js';
 import { getWeekdayCapacity, WEEKDAYS } from '../services/capacityService.js';
 
@@ -104,7 +105,11 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       return res.send(pdf);
     } catch (err) {
-      console.error('Attendance PDF error:', err);
+      await captureError(err, {
+        route: 'GET /api/reports/attendance',
+        centerId: req.center?.id,
+        context: { period, month, format: 'pdf' },
+      });
       return res.status(500).json({ error: 'Failed to generate PDF' });
     }
   }

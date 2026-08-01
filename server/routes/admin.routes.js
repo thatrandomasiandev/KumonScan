@@ -9,6 +9,7 @@ import {
   WEEKDAYS,
 } from '../services/capacityService.js';
 import { GATEWAY_LAST_SEEN_KEY } from './gateway.routes.js';
+import { logger } from '../services/loggingService.js';
 
 const router = Router();
 
@@ -44,7 +45,7 @@ router.post('/admin/roster-import', requireAdmin, async (req, res) => {
       has_anomalies: anomalies > 0,
     });
   } catch (err) {
-    console.error('Roster import error:', err);
+    logger.warn({ err, route: 'POST /api/admin/roster-import', filename }, 'roster import rejected');
     res.status(400).json({ error: err.message || 'Roster import failed' });
   }
 });

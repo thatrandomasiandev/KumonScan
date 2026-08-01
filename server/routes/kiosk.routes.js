@@ -14,6 +14,7 @@ import {
 import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { resolveLanguage } from '../services/i18nService.js';
+import { captureError } from '../services/errorReportingService.js';
 import { getAuthoritativeTimeOr503 } from './shared.js';
 
 const router = Router();
@@ -142,7 +143,11 @@ router.post('/register', registerLimiter, async (req, res) => {
       }
     }
 
-    console.error('Register error:', err);
+    await captureError(err, {
+      route: 'POST /api/register',
+      centerId: req.center?.id,
+      context: { first_name, last_name },
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -250,7 +255,11 @@ router.post('/scan', scanLimiter, async (req, res) => {
         session: err.openSession ? enrichOpenSession(err.openSession) : undefined,
       });
     }
-    console.error('Scan error:', err);
+    await captureError(err, {
+      route: 'POST /api/scan',
+      centerId: req.center?.id,
+      context: { qr_code_value: req.body?.qr_code_value },
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
 });

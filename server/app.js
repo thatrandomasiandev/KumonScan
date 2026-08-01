@@ -10,6 +10,7 @@ import centersRoutes from './routes/centers.routes.js';
 import { resolveCenterFromSlug, resolveDefaultCenter } from './middleware/center.js';
 import { createCorsOptions } from './corsConfig.js';
 import { ensureDb } from './db.js';
+import { expressErrorHandler } from './services/errorReportingService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,6 +86,9 @@ export function createApp() {
       `client/dist not found at ${clientDist} — API only. Run: npm run build --prefix client`
     );
   }
+
+  // Last: capture anything routes let escape, so no error dies in a closed terminal.
+  app.use(expressErrorHandler);
 
   return app;
 }

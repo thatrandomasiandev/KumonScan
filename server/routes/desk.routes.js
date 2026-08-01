@@ -23,6 +23,8 @@ import {
   completeCheckOut,
 } from '../services/studentService.js';
 import { getWeekdayCapacity, countExpectedForWeekday } from '../services/capacityService.js';
+import { captureError } from '../services/errorReportingService.js';
+import { logger } from '../services/loggingService.js';
 import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { assertCaregiverCanPickUp } from '../services/caregiverService.js'; // agent-2-pickup-auth
@@ -93,7 +95,11 @@ router.post('/check-in', requireAdmin, async (req, res) => {
         session: err.openSession ? enrichOpenSession(err.openSession) : undefined,
       });
     }
-    console.error('Check-in error:', err);
+    await captureError(err, {
+      route: 'POST /api/check-in',
+      centerId: req.center?.id,
+      context: { student_id: req.body?.student_id, subjects: req.body?.subjects },
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -195,7 +201,11 @@ router.post('/check-out', requireAdmin, async (req, res) => {
       timezone: authoritativeTime.timezone,
     });
   } catch (err) {
-    console.error('Check-out error:', err);
+    await captureError(err, {
+      route: 'POST /api/check-out',
+      centerId: req.center?.id,
+      context: { student_id: req.body?.student_id, session_id: req.body?.session_id },
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -210,7 +220,7 @@ router.get('/present', requireAdmin, async (req, res) => {
     nowMs = new Date(authoritativeTime.iso).getTime();
     clockIso = authoritativeTime.iso;
   } catch (err) {
-    console.warn('Present clock fallback to host time:', err?.message || err);
+    logger.warn({ err, route: 'GET /api/present' }, 'present clock fell back to host time');
   }
 
   const rows = await db
@@ -276,7 +286,7 @@ router.get('/present', requireAdmin, async (req, res) => {
       : null;
     expectedToday = await countExpectedForWeekday(req.center.id, weekday);
   } catch (err) {
-    console.warn('Present capacity lookup failed:', err?.message || err);
+    logger.warn({ err, route: 'GET /api/present' }, 'present capacity lookup failed');
   }
 
   res.json({
