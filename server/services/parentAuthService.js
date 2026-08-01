@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import db, { exec, sqlNow } from '../db.js';
+import { enqueueRawSms } from './smsQueueService.js';
 
 /**
  * Parent magic-link auth, fully isolated from staff auth:
@@ -86,7 +87,7 @@ export async function findActiveStudentsByPhone(phone) {
 
   const candidates = await db
     .prepare(
-      `SELECT id, first_name, last_name, parent_phone
+      `SELECT id, first_name, last_name, parent_phone, center_id
        FROM students
        WHERE active = 1 AND parent_phone IS NOT NULL`
     )
@@ -182,20 +183,39 @@ export function parentSessionStudentId(token) {
 }
 
 /**
- * Delivery seam. No SMS channel exists on this branch (Vonage was removed),
- * so links are only surfaced in non-production logs for manual delivery.
- * When an outbound channel (SMS gateway / WhatsApp) lands, plug it in here.
+ * Delivers one magic link per matching student through the SMS gateway
+ * queue (agent-1-messaging). Each queue row carries the student's own
+ * center_id so the gateway phone for another center can never claim it.
+ *
+ * WhatsApp is not offered here even for notify_channel='whatsapp' students:
+ * business-initiated WhatsApp messages are limited to pre-approved Meta
+ * templates (WHATSAPP_TEMPLATES), and no magic-link template exists. SMS-only
+ * is an explicit scope cut for this flow.
+ *
+ * Never throws, and swallows per-link enqueue failures (enqueueRawSms itself
+ * never throws): requestParentAccess must resolve identically whether or not
+ * delivery worked, so a caller cannot distinguish outcomes (enumeration
+ * safety).
  */
-function deliverMagicLinks(phone, links) {
-  if (process.env.NODE_ENV === 'production') {
-    console.warn(
-      'parent-auth: no outbound message channel is configured; magic link not delivered'
-    );
-    return;
-  }
-  if (process.env.NODE_ENV !== 'test') {
-    for (const { studentName, url } of links) {
-      console.log(`parent-auth: magic link for ${studentName} (${phone}): ${url}`);
+async function deliverMagicLinks(links) {
+  for (const { student, url } of links) {
+    try {
+      await enqueueRawSms({
+        centerId: student.center_id,
+        studentId: student.id,
+        phone: student.parent_phone.trim(),
+        message:
+          `KumonScan: your sign-in link for ${student.first_name} ${student.last_name}: ` +
+          `${url} (expires in 15 minutes, single use)`,
+      });
+    } catch (err) {
+      console.error('parent-auth: magic link enqueue failed:', err?.message || err);
+    }
+
+    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+      console.log(
+        `parent-auth: magic link for ${student.first_name} ${student.last_name}: ${url}`
+      );
     }
   }
 }
@@ -214,10 +234,10 @@ export async function requestParentAccess(phone, { baseUrl }) {
   for (const student of students) {
     const rawToken = await createAccessToken(student.id);
     links.push({
-      studentName: `${student.first_name} ${student.last_name}`,
+      student,
       url: `${baseUrl}/family/verify?token=${rawToken}`,
     });
   }
 
-  deliverMagicLinks(phone, links);
+  await deliverMagicLinks(links);
 }

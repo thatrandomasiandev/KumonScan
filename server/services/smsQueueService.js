@@ -3,6 +3,31 @@ import { isWhatsAppConfigured, sendAttendanceWhatsApp } from './whatsappService.
 import { composeAttendanceNotification } from './i18nService.js';
 
 /**
+ * The single sms_queue insert path. Every outbound SMS (attendance
+ * notifications, parent magic links) goes through here. Never throws: a
+ * queue failure must not block or fail the flow that triggered the message,
+ * matching how the old Vonage notifyParent was allowed to fail silently.
+ *
+ * `centerId` is the message's tenancy: the queue row inherits it so the
+ * gateway poll for another center can never claim this message.
+ */
+export async function enqueueRawSms({ centerId, sessionId = null, studentId, phone, message }) {
+  try {
+    await db
+      .prepare(
+        `INSERT INTO sms_queue (center_id, session_id, student_id, parent_phone, message, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(centerId, sessionId, studentId, phone, message, sqlNow());
+
+    return { enqueued: true };
+  } catch (err) {
+    console.error('SMS queue enqueue failed:', err?.message || err);
+    return { enqueued: false, reason: 'error' };
+  }
+}
+
+/**
  * Dispatch one check-in/check-out notification. Never throws: a queue or
  * send failure must not block or fail a check-in/check-out, matching how the
  * old Vonage notifyParent was allowed to fail silently.
@@ -36,23 +61,13 @@ export async function enqueueNotification(session, student, action, iso) {
       return { enqueued: false, reason: 'no_parent_phone' };
     }
 
-    // The student row carries its own tenancy; the queue row inherits it so
-    // the gateway poll for another center can never claim this message.
-    await db
-      .prepare(
-        `INSERT INTO sms_queue (center_id, session_id, student_id, parent_phone, message, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        student.center_id,
-        session?.id ?? null,
-        student.id,
-        phone,
-        composeAttendanceNotification(student, action, iso),
-        sqlNow()
-      );
-
-    return { enqueued: true };
+    return await enqueueRawSms({
+      centerId: student.center_id,
+      sessionId: session?.id ?? null,
+      studentId: student.id,
+      phone,
+      message: composeAttendanceNotification(student, action, iso),
+    });
   } catch (err) {
     console.error('SMS queue enqueue failed:', err?.message || err);
     return { enqueued: false, reason: 'error' };

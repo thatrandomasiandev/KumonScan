@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -230,6 +230,96 @@ describe('parent auth', () => {
       .set('X-Forwarded-For', nextIp());
     expect(authed.body.authenticated).toBe(true);
     expect(authed.body.student.id).toBe(student.id);
+  });
+});
+
+describe('magic-link delivery', () => {
+  beforeEach(async () => {
+    await ensureParentAuthTables();
+    await wipeStudentData();
+    await db.exec('TRUNCATE TABLE sms_queue');
+  });
+
+  async function smsQueueRows() {
+    return db.prepare('SELECT * FROM sms_queue ORDER BY id').all();
+  }
+
+  async function requestLink(phone) {
+    const res = await request(app)
+      .post('/api/parent-auth/request')
+      .set('X-Forwarded-For', nextIp())
+      .send({ phone });
+    expect(res.status).toBe(200);
+    return res;
+  }
+
+  it('enqueues exactly one sms_queue row per matching active student, with the verify URL', async () => {
+    const shared = '555-333-0001';
+    const kidA = await insertStudent({ first: 'Twin', last: 'One', phone: shared });
+    const kidB = await insertStudent({ first: 'Twin', last: 'Two', phone: shared });
+    await insertStudent({ first: 'Other', last: 'Family', phone: '555-333-9999' });
+
+    await requestLink('(555) 333-0001');
+
+    const rows = await smsQueueRows();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.student_id).sort()).toEqual([kidA.id, kidB.id].sort());
+    for (const row of rows) {
+      expect(row.message).toMatch(/\/family\/verify\?token=/);
+      expect(row.parent_phone).toBe(shared);
+      expect(row.center_id).not.toBeNull();
+      expect(row.session_id).toBeNull();
+      expect(row.status).toBe('pending');
+    }
+  });
+
+  it('the enqueued token is real: verifying it signs the parent in', async () => {
+    const student = await insertStudent({ first: 'Link', last: 'Works', phone: '555-333-0002' });
+
+    await requestLink('555-333-0002');
+
+    const [row] = await smsQueueRows();
+    const token = row.message.match(/\/family\/verify\?token=([A-Za-z0-9_-]+)/)?.[1];
+    expect(token).toBeTruthy();
+
+    const res = await request(app)
+      .get(`/api/parent-auth/verify?token=${encodeURIComponent(token)}`)
+      .set('X-Forwarded-For', nextIp());
+    expect(res.status).toBe(200);
+    expect(res.body.student.id).toBe(student.id);
+  });
+
+  it('a phone not on file enqueues nothing and returns the identical generic response', async () => {
+    await insertStudent({ first: 'On', last: 'File', phone: '555-333-0003' });
+
+    const onFile = await requestLink('555-333-0003');
+    const notOnFile = await requestLink('555-999-0000');
+
+    expect(notOnFile.body).toEqual(onFile.body);
+    const rows = await smsQueueRows();
+    expect(rows).toHaveLength(1); // only the on-file request enqueued
+  });
+
+  it('a forced sms_queue insert failure does not change the response or throw past it', async () => {
+    await insertStudent({ first: 'Queue', last: 'Down', phone: '555-333-0004' });
+
+    const realPrepare = db.prepare.bind(db);
+    const spy = vi.spyOn(db, 'prepare').mockImplementation((sql) => {
+      if (/INSERT INTO sms_queue/i.test(sql)) {
+        throw new Error('forced sms_queue failure');
+      }
+      return realPrepare(sql);
+    });
+
+    try {
+      const failed = await requestLink('555-333-0004'); // must not 500 or leak
+      const notOnFile = await requestLink('555-999-0000');
+      expect(failed.body).toEqual(notOnFile.body);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(await smsQueueRows()).toHaveLength(0);
   });
 });
 
