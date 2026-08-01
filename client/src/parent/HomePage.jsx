@@ -265,10 +265,24 @@ function useOptionalSection(section) {
   return result;
 }
 
+function formatWhen(value) {
+  // Date-only values (YYYY-MM-DD) must not shift across timezones.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', {
+      timeZone: 'UTC',
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+  return formatDate(value);
+}
+
 function bookingWhen(booking) {
   const when = booking.booking_date || booking.date || booking.start_time;
   if (!when) return 'Scheduled';
-  const label = formatDate(when);
+  const label = formatWhen(when);
   const time = booking.start_time && booking.start_time !== when
     ? ` · ${booking.start_time}`
     : '';

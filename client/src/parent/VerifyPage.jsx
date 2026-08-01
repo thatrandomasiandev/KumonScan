@@ -17,7 +17,9 @@ export default function VerifyPage() {
 
   useEffect(() => {
     // React 18 StrictMode double-invokes effects; the token is single-use,
-    // so the second invocation must not re-submit it.
+    // so exactly one verification request may ever be sent. No cancellation
+    // flag: the ref guard means the second (StrictMode) invocation is a
+    // no-op, and the single in-flight result must always be applied.
     if (startedRef.current) return;
     startedRef.current = true;
 
@@ -26,23 +28,16 @@ export default function VerifyPage() {
       return;
     }
 
-    let cancelled = false;
-
     (async () => {
       try {
         const result = await parentApi.verifyToken(token);
-        if (cancelled) return;
         setStudent(result.student);
         setStatus('authenticated');
         navigate('/family/home', { replace: true });
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        setError(err.message);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [token, navigate, setStudent, setStatus]);
 
   return (
