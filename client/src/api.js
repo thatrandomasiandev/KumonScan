@@ -29,7 +29,11 @@ async function request(path, options = {}) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.error || `Request failed (${response.status})`);
+    const error = new Error(data.error || `Request failed (${response.status})`);
+    // agent-offline: lets the offline queue tell deterministic rejections
+    // (4xx, drop the action) from transient failures (5xx/network, retry).
+    error.status = response.status;
+    throw error;
   }
 
   return data;
@@ -42,15 +46,17 @@ export const api = {
       body: JSON.stringify({ qr_code_value, force, subjects }),
     }),
 
-  checkIn: (student_id, subjects, { mode = 'in_person' } = {}) =>
+  checkIn: (student_id, subjects, { mode = 'in_person', idempotencyKey } = {}) =>
     request('/check-in', {
       method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
       body: JSON.stringify({ student_id, subjects, mode }),
     }),
 
-  checkOut: ({ student_id, session_id } = {}) =>
+  checkOut: ({ student_id, session_id, idempotencyKey } = {}) =>
     request('/check-out', {
       method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
       body: JSON.stringify({ student_id, session_id }),
     }),
 
