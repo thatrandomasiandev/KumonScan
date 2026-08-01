@@ -82,6 +82,16 @@ NODE_ENV=production
 
 Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `ALLOWED_ORIGINS` only for cross-origin admin clients.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`, in three parallel jobs:
+
+- **Server tests:** spins up a fresh `postgres:16` service container plus an HTTP proxy (`local-neon-http-proxy`) that lets the `@neondatabase/serverless` driver reach it. `server/scripts/ci-migrate.js` runs `ensureDb()` against that container (and refuses any `*.neon.tech` host), then `vitest run --config vitest.ci.config.js` executes the suite. No CI run touches the shared Neon test branch; each run's database is created and destroyed with the job.
+- **Client build:** `npm ci && npm run build` in `client/`. A build error fails the check.
+- **Marketing site build:** same, in `marketing-site/`; skipped with a notice until that directory exists on the ref.
+
+Preview deploys come from Vercel's Git integration (configured via `vercel.json`), not from Actions.
+
 ## Pages
 
 | Route        | Description                                                      |
