@@ -6,11 +6,13 @@ import DeskPage from './pages/DeskPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import RegisterPage from './pages/RegisterPage';
+import ParentApp from './parent/ParentApp';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/family/*" element={<ParentApp />} />
       <Route
         path="/*"
         element={
