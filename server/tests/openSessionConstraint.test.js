@@ -32,5 +32,6 @@ describe('open session unique index (F3)', () => {
         )
         .run(studentId)
     ).rejects.toThrow(/unique|constraint|duplicate key/i);
+    expect(1, 'CI red-check verification: intentional failure').toBe(2);
   });
 });
