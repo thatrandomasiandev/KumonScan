@@ -21,6 +21,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import { api, formatDuration, formatTime } from '../api';
+import { curriculumApi } from '../curriculumApi';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { useSnackbar } from '../components/SnackbarProvider';
@@ -31,6 +32,10 @@ const SUBJECT_OPTIONS = [
   { value: 'reading', label: 'Reading', allowance: 30 },
   { value: 'both', label: 'Both', allowance: 60 },
 ];
+
+// Optional worksheet logging at check-out. Set VITE_DESK_WORKSHEET_LOG=0 to
+// hide the field; logging is best-effort and never blocks the check-out.
+const DESK_WORKSHEET_LOG_ENABLED = import.meta.env.VITE_DESK_WORKSHEET_LOG !== '0';
 
 function formatClock(date, timezone) {
   return date.toLocaleString('en-US', {
@@ -256,6 +261,9 @@ export default function DeskPage() {
   const [submitting, setSubmitting] = useState(false);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
+  // Optional worksheet log at check-out (see DESK_WORKSHEET_LOG_ENABLED).
+  const [worksheetSubject, setWorksheetSubject] = useState('math');
+  const [worksheetPage, setWorksheetPage] = useState('');
   const [tick, setTick] = useState(0);
   const [absent, setAbsent] = useState(null);
   const [absentLoading, setAbsentLoading] = useState(false);
@@ -335,6 +343,13 @@ export default function DeskPage() {
     }
   }, [selected]);
 
+  // Fresh worksheet fields per check-out; default subject from the session.
+  useEffect(() => {
+    if (!checkoutTarget) return;
+    setWorksheetPage('');
+    setWorksheetSubject(checkoutTarget.subjects === 'reading' ? 'reading' : 'math');
+  }, [checkoutTarget]);
+
   async function handleCheckIn(e) {
     e.preventDefault();
     if (!selected || submitting) return;
@@ -359,13 +374,32 @@ export default function DeskPage() {
     setCheckingOut(true);
     try {
       const result = await api.checkOut({ session_id: checkoutTarget.session_id });
+
+      // Worksheet logging is best-effort after the check-out has succeeded:
+      // a failed log warns but never blocks or reverts the check-out.
+      let worksheetNote = '';
+      const page = Number(worksheetPage);
+      if (DESK_WORKSHEET_LOG_ENABLED && worksheetPage !== '' && Number.isInteger(page)) {
+        try {
+          const logged = await curriculumApi.logCompletion(checkoutTarget.id, {
+            subject: worksheetSubject,
+            page_number: page,
+            session_id: checkoutTarget.session_id,
+          });
+          worksheetNote = ` · ${logged.completion.level_code} page ${logged.completion.page_number} logged`;
+        } catch (logErr) {
+          worksheetNote = ` · worksheet log failed: ${logErr.message}`;
+        }
+      }
+
       const mins = Math.round(result.session.duration_minutes || 0);
       const over =
         result.session.is_overtime && result.session.overtime_minutes > 0
           ? ` (+${result.session.overtime_minutes} over)`
           : '';
-      showSnackbar(`${result.student.name} checked out · ${mins} min${over}`);
+      showSnackbar(`${result.student.name} checked out · ${mins} min${over}${worksheetNote}`);
       setCheckoutTarget(null);
+      setWorksheetPage('');
       await loadData();
     } catch (err) {
       showSnackbar(err.message);
@@ -766,6 +800,37 @@ export default function DeskPage() {
               : ''}
             . Session length is stamped from timeapi.io on check-out.
           </Typography>
+          {DESK_WORKSHEET_LOG_ENABLED && (
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mt: 2.5, flexWrap: 'wrap' }}>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={worksheetSubject}
+                onChange={(_e, next) => {
+                  if (next) setWorksheetSubject(next);
+                }}
+                disabled={checkingOut}
+                aria-label="Subject of the completed worksheet"
+              >
+                <ToggleButton value="math" sx={{ textTransform: 'none', px: 2 }}>
+                  Math
+                </ToggleButton>
+                <ToggleButton value="reading" sx={{ textTransform: 'none', px: 2 }}>
+                  Reading
+                </ToggleButton>
+              </ToggleButtonGroup>
+              <TextField
+                size="small"
+                label="Worksheet page (optional)"
+                value={worksheetPage}
+                onChange={(e) => setWorksheetPage(e.target.value)}
+                disabled={checkingOut}
+                inputProps={{ inputMode: 'numeric', min: 1, max: 200, type: 'number' }}
+                helperText="Logs at the student's current level"
+                sx={{ width: 220 }}
+              />
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button variant="text" onClick={() => setCheckoutTarget(null)} disabled={checkingOut}>

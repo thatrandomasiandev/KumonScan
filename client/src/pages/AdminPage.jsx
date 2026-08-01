@@ -37,6 +37,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import { api, formatTime, formatDuration } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
+import ProgressTracker from '../components/ProgressTracker';
 import { useSnackbar } from '../components/SnackbarProvider';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
@@ -1203,6 +1204,10 @@ export default function AdminPage() {
                   );
                 }}
               />
+
+              <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
+
+              <ProgressTracker student={selectedStudent} />
 
               <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
 
