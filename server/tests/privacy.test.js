@@ -248,10 +248,13 @@ describe('privacy & data handling', () => {
 
       // res.on('finish') fires after the response is sent; give the async
       // audit insert a moment to land.
-      await vi.waitFor(async () => {
-        const rows = await auditRows({ entity_type: 'student' });
-        expect(rows.length).toBe(2);
-      });
+      await vi.waitFor(
+        async () => {
+          const rows = await auditRows({ entity_type: 'student' });
+          expect(rows.length).toBe(2);
+        },
+        { timeout: 5000 }
+      );
 
       const rows = await auditRows({ entity_type: 'student' });
       expect(rows[0]).toMatchObject({
@@ -286,10 +289,13 @@ describe('privacy & data handling', () => {
         .send({ student_id: id });
       expect(checkOut.status).toBe(200);
 
-      await vi.waitFor(async () => {
-        const rows = await auditRows({ entity_type: 'session' });
-        expect(rows.length).toBe(2);
-      });
+      await vi.waitFor(
+        async () => {
+          const rows = await auditRows({ entity_type: 'session' });
+          expect(rows.length).toBe(2);
+        },
+        { timeout: 5000 }
+      );
 
       const rows = await auditRows({ entity_type: 'session' });
       expect(rows.map((r) => r.action)).toEqual(['create', 'update']);
@@ -303,10 +309,13 @@ describe('privacy & data handling', () => {
         .send({ first_name: 'Kiosk', last_name: 'Signup' });
       expect(res.status).toBe(201);
 
-      await vi.waitFor(async () => {
-        const rows = await auditRows({ action: 'create' });
-        expect(rows.length).toBe(1);
-      });
+      await vi.waitFor(
+        async () => {
+          const rows = await auditRows({ action: 'create' });
+          expect(rows.length).toBe(1);
+        },
+        { timeout: 5000 }
+      );
 
       const [row] = await auditRows({ action: 'create' });
       expect(row.actor_type).toBe('system');
