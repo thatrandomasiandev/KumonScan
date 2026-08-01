@@ -5,7 +5,17 @@ import { verifyPassword } from '../utils/passwords.js';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function sessionSecret() {
-  return process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD || 'dev-insecure';
+  const secret =
+    process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD || '';
+  if (secret) return secret;
+  // Production must not mint forgeable cookies. Tests and local dev may use a
+  // fixed fallback; NODE_ENV=production without a secret fails closed.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'ADMIN_SESSION_SECRET (or ADMIN_PASSWORD) is required in production'
+    );
+  }
+  return 'dev-insecure';
 }
 
 function timingSafeEqualString(a, b) {

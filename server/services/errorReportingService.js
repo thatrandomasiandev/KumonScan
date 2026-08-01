@@ -114,6 +114,17 @@ export async function recentErrorCount({ hours = 24, centerId } = {}) {
  * answers 500. Mount after every route so nothing falls through silently.
  */
 export async function expressErrorHandler(err, req, res, next) {
+  // Client/request errors (body too large, malformed JSON, etc.) already carry
+  // a 4xx status from Express middleware. Preserve that status and skip the
+  // durable error_log — they are not server failures.
+  const clientStatus = Number(err?.status || err?.statusCode);
+  if (Number.isInteger(clientStatus) && clientStatus >= 400 && clientStatus < 500) {
+    if (res.headersSent) return next(err);
+    return res.status(clientStatus).json({
+      error: err.type === 'entity.too.large' ? 'Payload too large' : err.message || 'Bad request',
+    });
+  }
+
   await captureError(err, {
     route: `${req.method} ${req.originalUrl?.split('?')[0] || req.path}`,
     centerId: req.center?.id ?? null,
