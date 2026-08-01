@@ -346,7 +346,8 @@ async function migrateStudentsTable() {
         schedule_days TEXT,
         parent_phone TEXT,
         notify_channel TEXT NOT NULL DEFAULT 'sms',
-        parent_whatsapp TEXT
+        parent_whatsapp TEXT,
+        preferred_language TEXT NOT NULL DEFAULT 'en'
       )
     `);
     return;
@@ -422,6 +423,11 @@ async function migrateStudentsTable() {
   }
   if (!cols.includes('parent_whatsapp')) {
     await exec(`ALTER TABLE students ADD COLUMN parent_whatsapp TEXT`);
+  }
+  if (!cols.includes('preferred_language')) {
+    await exec(
+      `ALTER TABLE students ADD COLUMN IF NOT EXISTS preferred_language TEXT NOT NULL DEFAULT 'en'`
+    );
   }
 }
 

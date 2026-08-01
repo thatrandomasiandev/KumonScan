@@ -1,24 +1,6 @@
 import db, { sqlNow } from '../db.js';
-import { getCenterTimezone } from '../timeService.js';
-import { formatFullName } from '../utils/names.js';
 import { isWhatsAppConfigured, sendAttendanceWhatsApp } from './whatsappService.js';
-
-function formatLocalTime(iso) {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: getCenterTimezone(),
-  }).format(new Date(iso));
-}
-
-function buildMessage(action, student, iso) {
-  const name = formatFullName(student);
-  const time = formatLocalTime(iso);
-  if (action === 'checked_out') {
-    return `${name} has finished at Kumon and is ready for pickup (${time}).`;
-  }
-  return `${name} checked in at Kumon at ${time}.`;
-}
+import { composeAttendanceNotification } from './i18nService.js';
 
 /**
  * Dispatch one check-in/check-out notification. Never throws: a queue or
@@ -66,7 +48,7 @@ export async function enqueueNotification(session, student, action, iso) {
         session?.id ?? null,
         student.id,
         phone,
-        buildMessage(action, student, iso),
+        composeAttendanceNotification(student, action, iso),
         sqlNow()
       );
 

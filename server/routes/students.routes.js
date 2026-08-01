@@ -19,6 +19,7 @@ import {
 import { normalizeSubjects, SUBJECT_LABELS } from '../sessionRules.js';
 import { serializeStudent, getStudentStats } from '../services/studentService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
+import { getSupportedLanguages } from '../services/i18nService.js';
 
 const router = Router();
 
@@ -172,6 +173,20 @@ router.patch('/students/:id', requireAdmin, async (req, res) => {
     }
     updates.push('parent_whatsapp = ?');
     values.push(whatsapp == null || whatsapp.trim() === '' ? null : whatsapp.trim());
+  }
+
+  if (req.body.preferred_language !== undefined) {
+    const raw = req.body.preferred_language;
+    // Admin edits come from a dropdown of supported languages, so anything
+    // else is a client bug; reject instead of silently coercing to 'en'.
+    const supported = getSupportedLanguages();
+    if (typeof raw !== 'string' || !supported.includes(raw.trim().toLowerCase())) {
+      return res.status(400).json({
+        error: `preferred_language must be one of: ${supported.join(', ')}`,
+      });
+    }
+    updates.push('preferred_language = ?');
+    values.push(raw.trim().toLowerCase());
   }
 
   if (updates.length === 0) {

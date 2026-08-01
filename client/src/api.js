@@ -54,10 +54,10 @@ export const api = {
       body: JSON.stringify({ student_id, session_id }),
     }),
 
-  register: (first_name, last_name) =>
+  register: (first_name, last_name, preferred_language) =>
     request('/register', {
       method: 'POST',
-      body: JSON.stringify({ first_name, last_name }),
+      body: JSON.stringify({ first_name, last_name, preferred_language }),
     }),
 
   getStudents: () => request('/students'),

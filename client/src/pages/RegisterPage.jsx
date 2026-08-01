@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Link, useParams } from 'react-router-dom';
-import { centerPath } from '../centerPath';
 import {
   Box,
   Button,
@@ -16,7 +15,10 @@ import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import { useTranslation } from 'react-i18next';
 import { api, formatTime } from '../api';
+import LanguageSelector from '../i18n/LanguageSelector';
+import { centerPath } from '../centerPath';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
 const QR_OPTIONS = {
@@ -26,6 +28,7 @@ const QR_OPTIONS = {
 };
 
 function CheckInResult({ result }) {
+  const { t } = useTranslation();
   const isCheckIn = result.action === 'checked_in';
 
   return (
@@ -45,7 +48,7 @@ function CheckInResult({ result }) {
       />
       <Box>
         <Typography variant="titleSmall">
-          {isCheckIn ? 'Checked in successfully!' : 'Checked out successfully!'}
+          {isCheckIn ? t('register.checkedInSuccess') : t('register.checkedOutSuccess')}
         </Typography>
         <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mt: 0.5 }}>
           {formatTime(result.timestamp, result.timezone)}
@@ -56,6 +59,7 @@ function CheckInResult({ result }) {
 }
 
 function QRResult({ registration, onReset, centerSlug }) {
+  const { t, i18n } = useTranslation();
   const canvasRef = useRef(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [checkingIn, setCheckingIn] = useState(false);
@@ -114,10 +118,10 @@ function QRResult({ registration, onReset, centerSlug }) {
 
     const fullName = `${registration.first_name} ${registration.last_name}`;
     printWindow.document.write(`<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8" /><title>${fullName} - Kumon QR</title>
+<html lang="${i18n.resolvedLanguage || 'en'}"><head><meta charset="UTF-8" /><title>${fullName} - Kumon QR</title>
 <style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Roboto,sans-serif;color:#1A1B22}
 img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500}p{margin:0;color:#44464F;font-size:14px}</style></head>
-<body><img src="${qrDataUrl}" alt="QR code" /><h1>${fullName}</h1><p>Personal Kumon check-in QR code</p></body></html>`);
+<body><img src="${qrDataUrl}" alt="QR code" /><h1>${fullName}</h1><p>${t('register.printQrCaption')}</p></body></html>`);
     printWindow.document.close();
     printWindow.focus();
     printWindow.onload = () => printWindow.print();
@@ -158,7 +162,7 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
         <canvas
           ref={canvasRef}
           style={{ minWidth: 250, minHeight: 250, display: 'block' }}
-          aria-label={`QR code for ${registration.first_name}`}
+          aria-label={t('register.qrAria', { name: registration.first_name })}
         />
       </Paper>
 
@@ -177,8 +181,8 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
         <InfoOutlinedIcon sx={{ color: md3Colors.primary, mt: 0.25 }} />
         <Typography variant="bodyMedium">
           {registration.is_new
-            ? "You've been registered! Save your QR code below."
-            : "Welcome back! Here's your personal check-in QR code."}
+            ? t('register.newStudentInfo')
+            : t('register.returningStudentInfo')}
         </Typography>
       </Box>
 
@@ -195,7 +199,11 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
           }),
         }}
       >
-        {checkingIn ? 'Processing...' : isCheckedIn ? 'Check Out' : 'Check In Now'}
+        {checkingIn
+          ? t('register.processing')
+          : isCheckedIn
+            ? t('register.checkOut')
+            : t('register.checkInNow')}
       </Button>
 
       {checkInResult && <CheckInResult result={checkInResult} />}
@@ -212,7 +220,7 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
           disabled={!qrDataUrl}
           sx={{ bgcolor: md3Colors.primaryContainer, color: md3Colors.onPrimaryContainer, '&:hover': { bgcolor: md3Colors.primaryContainer } }}
         >
-          Download PNG
+          {t('register.downloadPng')}
         </Button>
         <Button
           variant="contained"
@@ -220,16 +228,16 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
           disabled={!qrDataUrl}
           sx={{ bgcolor: md3Colors.primaryContainer, color: md3Colors.onPrimaryContainer, '&:hover': { bgcolor: md3Colors.primaryContainer } }}
         >
-          Print
+          {t('register.print')}
         </Button>
       </Box>
 
       <Box sx={{ borderTop: `1px solid ${md3Colors.outlineVariant}`, pt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Button component={Link} to={centerPath(centerSlug)} variant="outlined" fullWidth>
-          Open Check-In Scanner
+          {t('register.openScanner')}
         </Button>
         <Button variant="text" onClick={onReset} sx={{ color: md3Colors.onSurfaceVariant }}>
-          ← Back · Not you?
+          {t('register.backNotYou')}
         </Button>
       </Box>
     </Paper>
@@ -238,6 +246,7 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
 
 export default function RegisterPage() {
   const { centerSlug } = useParams();
+  const { t, i18n } = useTranslation();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -250,7 +259,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const data = await api.register(firstName, lastName);
+      const data = await api.register(firstName, lastName, i18n.resolvedLanguage);
       setRegistration(data);
     } catch (err) {
       setError(err.message);
@@ -274,13 +283,18 @@ export default function RegisterPage() {
         sx={{ bgcolor: getElevatedSurface(2), color: md3Colors.onSurface }}
       >
         <Toolbar sx={{ maxWidth: 480, mx: 'auto', width: '100%' }}>
-          <IconButton component={Link} to={centerPath(centerSlug)} edge="start" aria-label="Back to scan">
+          <IconButton
+            component={Link}
+            to={centerPath(centerSlug)}
+            edge="start"
+            aria-label={t('register.backToScanAria')}
+          >
             <ArrowBackOutlinedIcon />
           </IconButton>
           <Typography variant="titleLarge" sx={{ flex: 1, textAlign: 'center' }}>
-            Register
+            {t('register.title')}
           </Typography>
-          <Box sx={{ width: 40 }} />
+          <LanguageSelector />
         </Toolbar>
       </AppBar>
 
@@ -324,19 +338,19 @@ export default function RegisterPage() {
             </Box>
 
             <Typography variant="displaySmall" sx={{ textAlign: 'center', mb: 1 }}>
-              Get Your QR Code
+              {t('register.heading')}
             </Typography>
             <Typography
               variant="bodyMedium"
               sx={{ textAlign: 'center', color: md3Colors.onSurfaceVariant, mb: 3 }}
             >
-              Enter your name to look up or create your personal check-in code.
+              {t('register.subheading')}
             </Typography>
 
             <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
                 id="first-name"
-                label="First Name"
+                label={t('register.firstNameLabel')}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 autoComplete="given-name"
@@ -345,7 +359,7 @@ export default function RegisterPage() {
               />
               <TextField
                 id="last-name"
-                label="Last Name"
+                label={t('register.lastNameLabel')}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 autoComplete="family-name"
@@ -355,16 +369,26 @@ export default function RegisterPage() {
                 helperText={error || ' '}
               />
               <Button type="submit" variant="contained" fullWidth disabled={submitting}>
-                {submitting ? 'Looking up...' : 'Generate QR Code'}
+                {submitting ? t('register.submitting') : t('register.submit')}
               </Button>
             </Box>
 
-            <Button component={Link} to={centerPath(centerSlug)} variant="outlined" fullWidth sx={{ mt: 2 }}>
-              Go to Check-In Scanner
+            <Button
+              component={Link}
+              to={centerPath(centerSlug)}
+              variant="outlined"
+              fullWidth
+              sx={{ mt: 2 }}
+            >
+              {t('register.goToScanner')}
             </Button>
           </Paper>
         ) : (
-          <QRResult registration={registration} onReset={handleReset} centerSlug={centerSlug} />
+          <QRResult
+            registration={registration}
+            onReset={handleReset}
+            centerSlug={centerSlug}
+          />
         )}
       </Box>
     </Box>

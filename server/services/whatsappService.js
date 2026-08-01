@@ -2,6 +2,7 @@ import db, { sqlNow } from '../db.js';
 import { getCenterTimezone } from '../timeService.js';
 import { formatFullName } from '../utils/names.js';
 import { ensureMessagingTables, normalizePhoneE164 } from './messagingService.js';
+import { composeAttendanceNotification } from './i18nService.js';
 
 /**
  * WhatsApp notification channel via the Meta Cloud API.
@@ -9,11 +10,9 @@ import { ensureMessagingTables, normalizePhoneE164 } from './messagingService.js
  * WhatsApp business-initiated messages must use pre-approved templates; the
  * API rejects free-form text outside a 24-hour customer-service window. Two
  * templates are assumed: `checked_in` and `checked_out`, each with two body
- * parameters ({{1}} student name, {{2}} local time) and wording matching the
- * SMS texts in smsQueueService.buildMessage. The templates themselves live in
- * Meta Business Manager and must be submitted for approval before this
- * channel goes live; until then sends fail soft with a 'template not found'
- * API error and the message row is marked 'failed'.
+ * parameters ({{1}} student name, {{2}} local time). Meta template language is
+ * en_US until Spanish templates are approved; the locally stored thread body
+ * uses composeAttendanceNotification (student.preferred_language).
  *
  * WhatsApp rows reuse agent-1-messaging's `messages` table (channel =
  * 'whatsapp') so the staff thread view shows both channels in one inbox.
@@ -134,17 +133,6 @@ function formatLocalTime(iso) {
   }).format(new Date(iso));
 }
 
-/**
- * Local rendering of the template body for the thread view. Mirrors the SMS
- * wording in smsQueueService.buildMessage (kept separate to avoid a circular
- * import; the authoritative template text lives in Meta Business Manager).
- */
-function renderTemplateBody(action, name, time) {
-  if (action === 'checked_out') {
-    return `${name} has finished at Kumon and is ready for pickup (${time}).`;
-  }
-  return `${name} checked in at Kumon at ${time}.`;
-}
 
 /**
  * Check-in/check-out notification over WhatsApp. Same never-throws contract
@@ -166,13 +154,14 @@ export async function sendAttendanceWhatsApp(session, student, action, iso) {
     const templateName = WHATSAPP_TEMPLATES[action] || WHATSAPP_TEMPLATES.checked_in;
     const name = formatFullName(student);
     const time = formatLocalTime(iso);
+    const threadBody = composeAttendanceNotification(student, action, iso);
 
     const inserted = await db
       .prepare(
         `INSERT INTO messages (center_id, student_id, direction, body, channel, status, created_at)
          VALUES (?, ?, 'outbound', ?, 'whatsapp', 'pending', ?)`
       )
-      .run(student.center_id, student.id, renderTemplateBody(action, name, time), sqlNow());
+      .run(student.center_id, student.id, threadBody, sqlNow());
     const messageId = inserted.lastInsertRowid;
 
     const result = await sendWhatsAppTemplate(to, templateName, [name, time]);

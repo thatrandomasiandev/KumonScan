@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "nativeName": "Español"
+  },
+  "language": {
+    "selectorLabel": "Idioma"
+  },
+  "register": {
+    "title": "Registro",
+    "backToScanAria": "Volver al escáner",
+    "heading": "Obtén tu código QR",
+    "subheading": "Escribe tu nombre para buscar o crear tu código personal de entrada.",
+    "firstNameLabel": "Nombre",
+    "lastNameLabel": "Apellido",
+    "submit": "Generar código QR",
+    "submitting": "Buscando...",
+    "goToScanner": "Ir al escáner de entrada",
+    "newStudentInfo": "¡Registro completado! Guarda tu código QR aquí abajo.",
+    "returningStudentInfo": "¡Bienvenido de nuevo! Este es tu código QR personal de entrada.",
+    "qrAria": "Código QR de {{name}}",
+    "checkInNow": "Registrar entrada",
+    "checkOut": "Registrar salida",
+    "processing": "Procesando...",
+    "checkedInSuccess": "¡Entrada registrada!",
+    "checkedOutSuccess": "¡Salida registrada!",
+    "downloadPng": "Descargar PNG",
+    "print": "Imprimir",
+    "openScanner": "Abrir el escáner de entrada",
+    "backNotYou": "← Volver · ¿No eres tú?",
+    "printQrCaption": "Código QR personal de entrada a Kumon"
+  }
+}

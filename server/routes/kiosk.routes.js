@@ -13,6 +13,7 @@ import {
 } from '../services/studentService.js';
 import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
+import { resolveLanguage } from '../services/i18nService.js';
 import { getAuthoritativeTimeOr503 } from './shared.js';
 
 const router = Router();
@@ -36,7 +37,11 @@ const scanLimiter = rateLimit({
 });
 
 router.post('/register', registerLimiter, async (req, res) => {
-  const { first_name: rawFirstName, last_name: rawLastName } = req.body;
+  const {
+    first_name: rawFirstName,
+    last_name: rawLastName,
+    preferred_language: rawLanguage,
+  } = req.body;
 
   const firstNameError = validateNameField(rawFirstName, 'First name');
   if (firstNameError) {
@@ -64,19 +69,31 @@ router.post('/register', registerLimiter, async (req, res) => {
       last_name: existing.last_name,
       name: formatFullName(existing),
       qr_code_value: existing.qr_code_value,
+      preferred_language: resolveLanguage(existing.preferred_language),
       is_new: false,
     });
   }
 
   const qr_code_value = nanoid(12);
+  // Self-serve registration records the UI language the parent registered in.
+  // Unsupported values resolve to 'en' rather than erroring; existing
+  // students keep their stored preference (staff may have set it on purpose).
+  const preferred_language = resolveLanguage(rawLanguage);
 
   try {
     const result = await db
       .prepare(
-        `INSERT INTO students (center_id, first_name, last_name, qr_code_value, registered_at)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO students (center_id, first_name, last_name, qr_code_value, registered_at, preferred_language)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(req.center.id, first_name, last_name, qr_code_value, sqlNow());
+      .run(
+        req.center.id,
+        first_name,
+        last_name,
+        qr_code_value,
+        sqlNow(),
+        preferred_language
+      );
 
     const student = await db
       .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
@@ -89,6 +106,7 @@ router.post('/register', registerLimiter, async (req, res) => {
         first_name: student.first_name,
         last_name: student.last_name,
         name: formatFullName(student),
+        preferred_language: student.preferred_language,
         registered_at: student.registered_at,
       },
     });
@@ -99,6 +117,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       last_name: student.last_name,
       name: formatFullName(student),
       qr_code_value: student.qr_code_value,
+      preferred_language: student.preferred_language,
       is_new: true,
     });
   } catch (err) {
@@ -117,6 +136,7 @@ router.post('/register', registerLimiter, async (req, res) => {
           last_name: duplicate.last_name,
           name: formatFullName(duplicate),
           qr_code_value: duplicate.qr_code_value,
+          preferred_language: resolveLanguage(duplicate.preferred_language),
           is_new: false,
         });
       }

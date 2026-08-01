@@ -1,0 +1,8 @@
+{
+  "_meta": {
+    "nativeName": "Español",
+    "intlLocale": "es-US"
+  },
+  "checked_in": "{{name}} se registró en Kumon ({{time}}).",
+  "checked_out": "{{name}} terminó su sesión en Kumon y ya pueden pasar a recogerle ({{time}})."
+}

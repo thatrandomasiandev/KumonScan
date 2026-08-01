@@ -66,6 +66,7 @@ export async function insertStudent(centerId, {
   parent_phone = null,
   notify_channel = 'sms',
   parent_whatsapp = null,
+  preferred_language = 'en',
   active = 1,
 } = {}) {
   const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
@@ -73,8 +74,8 @@ export async function insertStudent(centerId, {
     .prepare(
       `INSERT INTO students
          (center_id, first_name, last_name, qr_code_value, active, enrolled_subjects,
-          schedule_days, parent_phone, notify_channel, parent_whatsapp)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          schedule_days, parent_phone, notify_channel, parent_whatsapp, preferred_language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       centerId,
@@ -86,9 +87,17 @@ export async function insertStudent(centerId, {
       days,
       parent_phone,
       notify_channel,
-      parent_whatsapp
+      parent_whatsapp,
+      preferred_language
     );
-  return { id: result.lastInsertRowid, qr, center_id: centerId };
+  return {
+    id: result.lastInsertRowid,
+    qr,
+    center_id: centerId,
+    preferred_language,
+    first_name: first,
+    last_name: last,
+  };
 }
 
 async function tableHasColumn(table, column) {

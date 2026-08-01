@@ -25,6 +25,7 @@ import {
   CircularProgress,
   Tabs,
   Tab,
+  MenuItem,
 } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
@@ -32,6 +33,7 @@ import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
@@ -45,6 +47,7 @@ import DataPortabilityPanel from '../components/DataPortabilityPanel'; // agent-
 import ResourceInventory from '../components/ResourceInventory'; // agent-5-resources
 import CaregiverManager from '../components/CaregiverManager'; // agent-2-pickup-auth
 import { useSnackbar } from '../components/SnackbarProvider';
+import { DEFAULT_LANGUAGE, getLanguageOptions } from '../i18n';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -357,6 +360,7 @@ function StudentScheduleEditor({ student, onSaved }) {
   const [phone, setPhone] = useState(student.parent_phone || '');
   const [notifyChannel, setNotifyChannel] = useState(student.notify_channel || 'sms');
   const [whatsapp, setWhatsapp] = useState(student.parent_whatsapp || '');
+  const [language, setLanguage] = useState(student.preferred_language || DEFAULT_LANGUAGE);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -365,6 +369,7 @@ function StudentScheduleEditor({ student, onSaved }) {
     setPhone(student.parent_phone || '');
     setNotifyChannel(student.notify_channel || 'sms');
     setWhatsapp(student.parent_whatsapp || '');
+    setLanguage(student.preferred_language || DEFAULT_LANGUAGE);
   }, [
     student.id,
     student.enrolled_subjects,
@@ -372,6 +377,7 @@ function StudentScheduleEditor({ student, onSaved }) {
     student.parent_phone,
     student.notify_channel,
     student.parent_whatsapp,
+    student.preferred_language,
   ]);
 
   const dirty =
@@ -380,7 +386,8 @@ function StudentScheduleEditor({ student, onSaved }) {
       JSON.stringify([...(student.schedule_days || [])].sort()) ||
     phone.trim() !== (student.parent_phone || '') ||
     notifyChannel !== (student.notify_channel || 'sms') ||
-    whatsapp.trim() !== (student.parent_whatsapp || '');
+    whatsapp.trim() !== (student.parent_whatsapp || '') ||
+    language !== (student.preferred_language || DEFAULT_LANGUAGE);
 
   function toggleDay(day) {
     setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
@@ -395,6 +402,7 @@ function StudentScheduleEditor({ student, onSaved }) {
         parent_phone: phone.trim() || null,
         notify_channel: notifyChannel,
         parent_whatsapp: whatsapp.trim() || null,
+        preferred_language: language,
       });
       showSnackbar(`Saved for ${updated.name}`);
       onSaved?.(updated);
@@ -544,6 +552,30 @@ function StudentScheduleEditor({ student, onSaved }) {
           sx={{ mb: 2.5 }}
         />
       )}
+
+      <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
+        Family language
+      </Typography>
+      <TextField
+        select
+        value={language}
+        onChange={(e) => setLanguage(e.target.value)}
+        fullWidth
+        size="small"
+        InputProps={{
+          startAdornment: (
+            <LanguageOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
+          ),
+        }}
+        helperText="Language for parent notifications (pickup texts) and the registration page."
+        sx={{ mb: 3 }}
+      >
+        {getLanguageOptions().map((opt) => (
+          <MenuItem key={opt.code} value={opt.code}>
+            {opt.nativeName}
+          </MenuItem>
+        ))}
+      </TextField>
 
       <Button variant="contained" onClick={handleSave} disabled={!dirty || saving} sx={{ mt: 0.5 }}>
         {saving ? 'Saving…' : 'Save enrollment'}
