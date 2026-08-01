@@ -6,6 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes/api.js';
+import privacyRoutes from './routes/privacy.routes.js';
+import { auditTrailMiddleware } from './services/auditLogService.js';
 import { createCorsOptions } from './corsConfig.js';
 import { ensureDb } from './db.js';
 
@@ -31,7 +33,9 @@ export function createApp() {
     }
   });
 
+  app.use('/api', auditTrailMiddleware);
   app.use('/api', apiRoutes);
+  app.use('/api', privacyRoutes);
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
