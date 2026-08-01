@@ -22,27 +22,78 @@ async function loginCookie() {
   return res.headers['set-cookie'];
 }
 
+/**
+ * The shared test branch may carry the in-flight multitenancy schema
+ * (NOT NULL center_id on students/sessions). Adapt inserts to whichever
+ * schema is present so this suite passes before and after that work merges.
+ */
+let centerIdPromise = null;
+
+async function centerIdIfRequired(table) {
+  const column = await db
+    .prepare(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = ? AND column_name = 'center_id'`
+    )
+    .get(table);
+  if (!column) return null;
+
+  if (!centerIdPromise) {
+    centerIdPromise = (async () => {
+      const existing = await db.prepare(`SELECT id FROM centers WHERE slug = 'main'`).get();
+      if (existing) return existing.id;
+      const created = await db
+        .prepare(
+          `INSERT INTO centers (slug, name, created_at) VALUES ('main', 'KumonScan Center', ?)`
+        )
+        .run(new Date().toISOString());
+      return created.lastInsertRowid;
+    })();
+  }
+  return centerIdPromise;
+}
+
 async function insertStudent({ first, last, phone = null } = {}) {
   const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
+  const centerId = await centerIdIfRequired('students');
+  const columns = ['first_name', 'last_name', 'qr_code_value', 'active', 'parent_phone'];
+  const values = [first, last, qr, 1, phone];
+  if (centerId != null) {
+    columns.push('center_id');
+    values.push(centerId);
+  }
   const result = await db
     .prepare(
-      `INSERT INTO students (first_name, last_name, qr_code_value, active, parent_phone)
-       VALUES (?, ?, ?, 1, ?)`
+      `INSERT INTO students (${columns.join(', ')})
+       VALUES (${columns.map(() => '?').join(', ')})`
     )
-    .run(first, last, qr, phone);
+    .run(...values);
   return { id: result.lastInsertRowid, qr };
 }
 
 async function insertCompletedSession(studentId, { checkIn, minutes, subjects = 'both' }) {
   const allowance = subjects === 'both' ? 60 : 30;
   const checkOut = new Date(new Date(checkIn).getTime() + minutes * 60_000).toISOString();
+  const centerId = await centerIdIfRequired('sessions');
+  const columns = [
+    'student_id',
+    'check_in_time',
+    'check_out_time',
+    'duration_minutes',
+    'subjects',
+    'allowance_minutes',
+  ];
+  const values = [studentId, checkIn, checkOut, minutes, subjects, allowance];
+  if (centerId != null) {
+    columns.push('center_id');
+    values.push(centerId);
+  }
   await db
     .prepare(
-      `INSERT INTO sessions
-         (student_id, check_in_time, check_out_time, duration_minutes, subjects, allowance_minutes)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO sessions (${columns.join(', ')})
+       VALUES (${columns.map(() => '?').join(', ')})`
     )
-    .run(studentId, checkIn, checkOut, minutes, subjects, allowance);
+    .run(...values);
 }
 
 async function digestRows(studentId) {
@@ -65,9 +116,9 @@ describe('parent progress digests', () => {
     process.env.CRON_SECRET = CRON_SECRET;
     await ensureDigestSchema();
     await dropCurriculumTables();
-    await db.exec('DELETE FROM digest_log');
-    await db.exec('DELETE FROM sessions');
-    await db.exec('DELETE FROM students');
+    // CASCADE clears rows in any student-referencing tables other agents'
+    // in-flight schema may have added to the shared test branch.
+    await db.exec('TRUNCATE TABLE digest_log, sessions, students CASCADE');
     cookie = await loginCookie();
   });
 
