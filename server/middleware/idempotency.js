@@ -80,10 +80,13 @@ export function idempotency() {
 
       // Store before sending: if the client received a response, a replay of
       // this key is guaranteed to find the stored row rather than re-execute.
+      // Explicit RETURNING: the db facade appends "RETURNING id" to INSERTs
+      // without one, and this table's primary key is `key`, not `id`.
       db.prepare(
         `INSERT INTO idempotency_keys (key, center_id, response_body, status_code, created_at)
          VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (key) DO NOTHING`
+         ON CONFLICT (key) DO NOTHING
+         RETURNING key`
       )
         .run(key, req.center.id, JSON.stringify(body), status, sqlNow())
         .catch((err) => console.error('Idempotency store failed:', err?.message || err))
