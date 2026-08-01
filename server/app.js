@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes/api.js';
+import demoRoutes from './routes/demo.routes.js';
 import { createCorsOptions } from './corsConfig.js';
 import { ensureDb } from './db.js';
 
@@ -30,6 +31,11 @@ export function createApp() {
       next(e);
     }
   });
+
+  // agent-demo: demo-deployment-only reset endpoint (inert unless DEMO_MODE=true).
+  if (process.env.DEMO_MODE === 'true') {
+    app.use('/api/demo', demoRoutes);
+  }
 
   app.use('/api', apiRoutes);
 
