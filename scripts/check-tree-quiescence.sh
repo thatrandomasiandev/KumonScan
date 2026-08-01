@@ -30,8 +30,9 @@ flag_activity() { quiescent=0; }
 mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null; }
 age_of() { echo $(( $(date +%s) - $(mtime_of "$1") )); }
 
+# NB: sed, not awk field-splitting — worktree paths may contain spaces.
 worktree_paths() {
-  git -C "$REPO_DIR" worktree list --porcelain | awk '/^worktree /{print $2}'
+  git -C "$REPO_DIR" worktree list --porcelain | sed -n 's/^worktree //p'
 }
 
 echo "=== Tree quiescence report ($(date -u +%Y-%m-%dT%H:%M:%SZ)) ==="
@@ -41,7 +42,7 @@ echo "--- 1. Files modified in the last $((RECENT_SECONDS / 60)) minutes ---"
 recent_total=0
 while IFS= read -r wt; do
   [ -d "$wt" ] || continue
-  recent="$(find "$wt" -type f -newermt "-${RECENT_SECONDS} seconds" \
+  recent="$(find "$wt" -type f -mmin "-$((RECENT_SECONDS / 60))" \
     -not -path '*/node_modules/*' -not -path '*/.git/*' \
     -not -path '*/dist/*' -not -path '*/.agent-coordination/*' \
     -not -name '.DS_Store' 2>/dev/null)"
@@ -108,7 +109,7 @@ fi
 echo
 echo "--- 5. Coordination ledger ($LEDGER) ---"
 if [ -f "$LEDGER" ]; then
-  in_progress="$(grep -E '\|\s*(in-progress|blocked' "$LEDGER" 2>/dev/null || true)"
+  in_progress="$(grep -E '\| *(in-progress|blocked:)' "$LEDGER" 2>/dev/null || true)"
   if [ -n "$in_progress" ]; then
     echo "Agents in-progress or blocked:"
     printf '%s\n' "$in_progress" | sed 's/^/  /'
