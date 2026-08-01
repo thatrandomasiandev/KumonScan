@@ -22,6 +22,14 @@ import { purgeExpiredData, setRetentionPolicy } from '../services/retentionServi
 
 const STAFF_IP = '198.51.100.30';
 
+// The login limiter allows 10 requests/minute per IP; with one login per test
+// a single IP would trip it. Each login gets its own address.
+let loginIpCounter = 0;
+function nextLoginIp() {
+  loginIpCounter += 1;
+  return `198.51.${100 + Math.floor(loginIpCounter / 200)}.${loginIpCounter % 200}`;
+}
+
 // The Neon serverless driver also uses fetch, so the stub must pass
 // everything except timeapi.io through to the real implementation.
 const realFetch = globalThis.fetch.bind(globalThis);
@@ -38,7 +46,7 @@ function stubTimeApi(iso = '2026-07-30T19:00:00.000Z') {
 async function loginCookie() {
   const res = await request(app)
     .post('/api/auth/login')
-    .set('X-Forwarded-For', STAFF_IP)
+    .set('X-Forwarded-For', nextLoginIp())
     .send({ password: 'test-admin-password' });
   expect(res.status).toBe(200);
   return res.headers['set-cookie'];
@@ -78,19 +86,57 @@ async function auditRows(filters = {}) {
   );
 }
 
+/**
+ * The shared test branch carries schema from other in-flight branches. The
+ * multi-center branch adds sessions.center_id NOT NULL (FK to centers) but,
+ * unlike students.center_id, without a DEFAULT — which breaks every insert
+ * from main-based code. Mirror the students default (center 1) when that
+ * drift is present; a default changes nothing for code that sets center_id
+ * explicitly.
+ */
+async function accommodateSharedSchemaDrift() {
+  const centerIdCol = await get(
+    `SELECT is_nullable, column_default FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sessions' AND column_name = 'center_id'`
+  );
+  if (!centerIdCol || centerIdCol.is_nullable !== 'NO' || centerIdCol.column_default) return;
+
+  await db.exec(`
+    INSERT INTO centers (id, slug, name, created_at)
+    VALUES (1, 'default', 'Default Center', '2026-01-01T00:00:00.000Z')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await db.exec(`ALTER TABLE sessions ALTER COLUMN center_id SET DEFAULT 1`);
+}
+
+/** Tables from any branch that reference students, children-first cleanup. */
+async function deleteAllStudentData() {
+  const referencing = (
+    await all(
+      `SELECT table_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND column_name = 'student_id'`
+    )
+  ).map((r) => r.table_name);
+
+  for (const table of referencing) {
+    await db.exec(`DELETE FROM ${table}`);
+  }
+  await db.exec('DELETE FROM students');
+}
+
 describe('privacy & data handling', () => {
   let cookie;
 
   beforeAll(async () => {
     await ensurePrivacySchema();
+    await accommodateSharedSchemaDrift();
   });
 
   beforeEach(async () => {
     clearAdminSessionsForTests();
     await db.exec('DELETE FROM audit_log');
     await db.exec('DELETE FROM retention_policy');
-    await db.exec('DELETE FROM sessions');
-    await db.exec('DELETE FROM students');
+    await deleteAllStudentData();
     stubTimeApi('2026-07-30T19:00:00.000Z');
     cookie = await loginCookie();
   });
