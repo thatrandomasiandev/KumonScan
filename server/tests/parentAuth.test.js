@@ -22,24 +22,82 @@ const {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_PUBLIC = path.join(__dirname, '..', '..', 'client', 'public');
 
+/**
+ * The shared test branch may carry the multi-tenant schema from sibling
+ * agents (students.center_id NOT NULL, extra tables referencing students).
+ * These helpers adapt so the suite passes on both schemas.
+ */
+async function columnExists(table, column) {
+  const row = await db
+    .prepare(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = ? AND column_name = ?`
+    )
+    .get(table, column);
+  return Boolean(row);
+}
+
+const tenantCenterId = {};
+
+async function centerIdFor(table) {
+  if (tenantCenterId[table] !== undefined) return tenantCenterId[table];
+  if (!(await columnExists(table, 'center_id'))) {
+    tenantCenterId[table] = null;
+    return null;
+  }
+
+  let center = await db.prepare('SELECT id FROM centers ORDER BY id LIMIT 1').get();
+  if (!center) {
+    await db
+      .prepare(`INSERT INTO centers (name, slug) VALUES ('Test Center', 'test-center')`)
+      .run();
+    center = await db.prepare('SELECT id FROM centers ORDER BY id LIMIT 1').get();
+  }
+  tenantCenterId[table] = center.id;
+  return center.id;
+}
+
+async function wipeStudentData() {
+  // CASCADE clears sibling agents' tables that hold FKs to students.
+  await db.exec('TRUNCATE TABLE parent_access_tokens, sessions, students CASCADE');
+}
+
 async function insertStudent({ first, last, phone = null } = {}) {
   const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
+  const centerId = await centerIdFor('students');
+
+  const columns = ['first_name', 'last_name', 'qr_code_value', 'active', 'parent_phone'];
+  const values = [first, last, qr, 1, phone];
+  if (centerId != null) {
+    columns.push('center_id');
+    values.push(centerId);
+  }
+
   const { lastInsertRowid } = await db
     .prepare(
-      `INSERT INTO students (first_name, last_name, qr_code_value, active, parent_phone)
-       VALUES (?, ?, ?, 1, ?)`
+      `INSERT INTO students (${columns.join(', ')})
+       VALUES (${columns.map(() => '?').join(', ')})`
     )
-    .run(first, last, qr, phone);
+    .run(...values);
   return { id: lastInsertRowid, qr };
 }
 
 async function insertSession(studentId, checkIn, checkOut = null, duration = null) {
+  const centerId = await centerIdFor('sessions');
+
+  const columns = ['student_id', 'check_in_time', 'check_out_time', 'duration_minutes'];
+  const values = [studentId, checkIn, checkOut, duration];
+  if (centerId != null) {
+    columns.push('center_id');
+    values.push(centerId);
+  }
+
   await db
     .prepare(
-      `INSERT INTO sessions (student_id, check_in_time, check_out_time, duration_minutes)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO sessions (${columns.join(', ')})
+       VALUES (${columns.map(() => '?').join(', ')})`
     )
-    .run(studentId, checkIn, checkOut, duration);
+    .run(...values);
 }
 
 /** Distinct client IP per call so the per-IP rate limiters never bleed across tests. */
@@ -62,9 +120,7 @@ async function verifyAndGetCookie(token) {
 describe('parent auth', () => {
   beforeEach(async () => {
     await ensureParentAuthTables();
-    await db.exec('DELETE FROM parent_access_tokens');
-    await db.exec('DELETE FROM sessions');
-    await db.exec('DELETE FROM students');
+    await wipeStudentData();
   });
 
   it('normalizes phone formats to a comparable form', () => {
@@ -184,9 +240,7 @@ describe('parent data isolation', () => {
 
   beforeEach(async () => {
     await ensureParentAuthTables();
-    await db.exec('DELETE FROM parent_access_tokens');
-    await db.exec('DELETE FROM sessions');
-    await db.exec('DELETE FROM students');
+    await wipeStudentData();
 
     studentA = await insertStudent({ first: 'Alpha', last: 'Kid', phone: '555-222-0001' });
     studentB = await insertStudent({ first: 'Beta', last: 'Kid', phone: '555-222-0002' });
