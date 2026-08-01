@@ -8,6 +8,7 @@ import {
   getWeekdayShortForDate,
 } from '../timeService.js';
 import { requireAdmin } from '../middleware/auth.js';
+import { idempotency } from '../middleware/idempotency.js';
 import { formatFullName } from '../utils/names.js';
 import {
   allowanceForSubjects,
@@ -30,7 +31,7 @@ import { getAuthoritativeTimeOr503 } from './shared.js';
 const router = Router();
 
 /** Staff desk check-in: pick student by id + subjects for today's visit. */
-router.post('/check-in', requireAdmin, async (req, res) => {
+router.post('/check-in', requireAdmin, idempotency(), async (req, res) => {
   try {
     const studentId = Number(req.body.student_id);
     if (!Number.isInteger(studentId) || studentId < 1) {
@@ -98,7 +99,7 @@ router.post('/check-in', requireAdmin, async (req, res) => {
 });
 
 /** Staff desk check-out by student_id or session_id. */
-router.post('/check-out', requireAdmin, async (req, res) => {
+router.post('/check-out', requireAdmin, idempotency(), async (req, res) => {
   try {
     const studentId = req.body.student_id != null ? Number(req.body.student_id) : null;
     const sessionId = req.body.session_id != null ? Number(req.body.session_id) : null;
