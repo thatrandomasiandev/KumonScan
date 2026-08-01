@@ -9,6 +9,7 @@ import AdminPage from './pages/AdminPage';
 import RegisterPage from './pages/RegisterPage';
 import MessagesPanel from './components/MessagesPanel';
 import InsightsPage from './pages/InsightsPage'; // agent-7-insights
+import BookingPage from './pages/BookingPage'; // agent-3-self-scheduling
 import { setCenterSlug } from './api';
 import { DEFAULT_CENTER_SLUG } from './centerPath';
 
@@ -29,6 +30,8 @@ function CenterRoutes() {
     <CenterScope>
       <Routes>
         <Route path="register" element={<RegisterPage />} />
+        {/* agent-3-self-scheduling: public parent booking, outside the staff shell */}
+        <Route path="book" element={<BookingPage />} />
         <Route
           path="*"
           element={
@@ -104,6 +107,7 @@ export default function App() {
         element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/insights`} replace />}
       />
       <Route path="/admin" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/admin`} replace />} />
+      <Route path="/book" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/book`} replace />} />
 
       <Route path="/:centerSlug/*" element={<CenterRoutes />} />
     </Routes>

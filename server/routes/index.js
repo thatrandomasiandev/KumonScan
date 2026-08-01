@@ -15,6 +15,7 @@ import webhooksRoutes from './webhooks.routes.js';
 import whatsappWebhookRoutes from './whatsappWebhook.routes.js';
 import resourcesRoutes from './resources.routes.js';
 import caregiversRoutes from './caregivers.routes.js';
+import bookingRoutes from './booking.routes.js';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use(insightsRoutes); // agent-7-insights: /insights/summary + /insights/a
 router.use(whatsappWebhookRoutes); // agent-8-whatsapp: /webhooks/whatsapp (Meta inbound + delivery status)
 router.use(resourcesRoutes); // agent-5-resources
 router.use(caregiversRoutes); // agent-2-pickup-auth
+router.use(bookingRoutes); // agent-3-self-scheduling
 router.use('/gateway', gatewayRoutes);
 router.use(exportRoutes); // agent-10-data-portability: /export/full
 // agent-10-data-portability: outbound subscription management. Mounted after
