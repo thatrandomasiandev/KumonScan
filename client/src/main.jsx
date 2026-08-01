@@ -20,4 +20,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </ThemeProvider>
   </React.StrictMode>
 );
-import './__ci_red_check_does_not_exist__.js';
