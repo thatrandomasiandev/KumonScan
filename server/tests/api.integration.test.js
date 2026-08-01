@@ -1,50 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { v4 as uuidv4 } from 'uuid';
 import app from '../app.js';
 import db from '../db.js';
 import { clearAdminSessionsForTests } from '../middleware/auth.js';
+import {
+  defaultCenter,
+  insertStudent,
+  loginCookie,
+  wipeCenterData,
+} from './helpers.js';
+
+const realFetch = globalThis.fetch;
 
 function stubTimeApi(iso = '2026-07-30T19:00:00.000Z') {
-  vi.stubGlobal('fetch', async (url) => {
+  vi.stubGlobal('fetch', async (url, options) => {
     if (String(url).includes('timeapi.io')) {
       return {
         ok: true,
         json: async () => ({ dateTime: iso }),
       };
     }
-    throw new Error(`Unexpected fetch in test: ${url}`);
+    return realFetch(url, options);
   });
-}
-
-async function loginCookie() {
-  const res = await request(app)
-    .post('/api/auth/login')
-    .set('X-Forwarded-For', '198.51.100.20')
-    .send({ password: 'test-admin-password' });
-  expect(res.status).toBe(200);
-  return res.headers['set-cookie'];
-}
-
-function insertStudent({ first, last, subjects = 'both', days = null } = {}) {
-  const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
-  const id = db
-    .prepare(
-      `INSERT INTO students
-         (first_name, last_name, qr_code_value, active, enrolled_subjects, schedule_days)
-       VALUES (?, ?, ?, 1, ?, ?)`
-    )
-    .run(first, last, qr, subjects, days).lastInsertRowid;
-  return { id, qr };
 }
 
 describe('API integration', () => {
   let cookie;
+  let center;
 
   beforeEach(async () => {
     clearAdminSessionsForTests();
-    db.exec('DELETE FROM sessions');
-    db.exec('DELETE FROM students');
+    center = await defaultCenter();
+    await wipeCenterData(center.id);
     stubTimeApi('2026-07-30T19:00:00.000Z');
     cookie = await loginCookie();
   });
@@ -55,7 +42,11 @@ describe('API integration', () => {
   });
 
   it('check-in → check-out round trip produces correct duration_minutes', async () => {
-    const { id } = insertStudent({ first: 'Round', last: 'Trip', subjects: 'math' });
+    const { id } = await insertStudent(center.id, {
+      first: 'Round',
+      last: 'Trip',
+      subjects: 'math',
+    });
 
     const checkIn = await request(app)
       .post('/api/check-in')
@@ -76,7 +67,11 @@ describe('API integration', () => {
   });
 
   it('duplicate check-in returns 409', async () => {
-    const { id } = insertStudent({ first: 'Already', last: 'In', subjects: 'both' });
+    const { id } = await insertStudent(center.id, {
+      first: 'Already',
+      last: 'In',
+      subjects: 'both',
+    });
 
     const first = await request(app)
       .post('/api/check-in')
@@ -96,17 +91,17 @@ describe('API integration', () => {
 
   it('/api/absent excludes already-checked-in and no-schedule students', async () => {
     // 2026-07-30 is a Thursday in America/Los_Angeles.
-    const scheduled = insertStudent({
+    const scheduled = await insertStudent(center.id, {
       first: 'Expected',
       last: 'Absent',
       days: JSON.stringify(['Thu']),
     });
-    const checkedIn = insertStudent({
+    const checkedIn = await insertStudent(center.id, {
       first: 'Expected',
       last: 'Present',
       days: JSON.stringify(['Thu']),
     });
-    insertStudent({
+    await insertStudent(center.id, {
       first: 'No',
       last: 'Schedule',
       days: null,

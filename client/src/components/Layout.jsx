@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { Box } from '@mui/material';
 import TopAppBar from './TopAppBar';
 import NavigationRail from './NavigationRail';
 import BottomNav from './BottomNav';
 import { md3Colors } from '../theme';
+import { pagePath } from '../centerPath';
 
 export default function Layout({ children }) {
   const location = useLocation();
-  const isScanPage = location.pathname === '/';
+  const { centerSlug } = useParams();
+  const isScanPage = pagePath(location.pathname) === '/';
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -22,22 +24,27 @@ export default function Layout({ children }) {
   return (
     <Box
       sx={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         display: 'flex',
         bgcolor: md3Colors.background,
+        pt: 'env(safe-area-inset-top)',
       }}
     >
-      {!isScanPage && <NavigationRail />}
+      {!isScanPage && <NavigationRail centerSlug={centerSlug} />}
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {!isScanPage && <TopAppBar scrolled={scrolled} onMenuClick={() => {}} />}
+        {!isScanPage && <TopAppBar scrolled={scrolled} centerSlug={centerSlug} />}
 
         <Box
           component="main"
           sx={{
             flex: 1,
-            pb: { xs: 10, md: 0 },
-            overflow: isScanPage ? 'hidden' : 'visible',
+            pb: {
+              xs: 'calc(72px + env(safe-area-inset-bottom))',
+              md: 0,
+            },
+            overflow: isScanPage ? 'auto' : 'visible',
+            WebkitOverflowScrolling: 'touch',
             display: isScanPage ? 'flex' : 'block',
             flexDirection: isScanPage ? 'column' : 'initial',
             minHeight: isScanPage ? 0 : 'auto',
@@ -46,12 +53,15 @@ export default function Layout({ children }) {
               from: { opacity: 0 },
               to: { opacity: 1 },
             },
+            '@media (prefers-reduced-motion: reduce)': {
+              animation: 'none',
+            },
           }}
         >
           {children}
         </Box>
 
-        <BottomNav />
+        <BottomNav centerSlug={centerSlug} />
       </Box>
     </Box>
   );

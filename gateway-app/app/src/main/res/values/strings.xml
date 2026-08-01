@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KumonScan Gateway</string>
+
+    <string name="section_settings">Settings</string>
+    <string name="hint_server_url">Server URL (https://kumonscan.vercel.app)</string>
+    <string name="hint_api_key">Gateway API key</string>
+    <string name="button_save">Save</string>
+
+    <string name="section_status">Status</string>
+    <string name="label_service">Service:</string>
+    <string name="label_last_poll">Last poll:</string>
+    <string name="label_last_result">Last result:</string>
+    <string name="label_sent_count">Sent since start:</string>
+    <string name="status_running">Running</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_never">Never</string>
+    <string name="status_none">None</string>
+
+    <string name="button_start">Start service</string>
+    <string name="button_stop">Stop service</string>
+
+    <string name="toast_settings_saved">Settings saved</string>
+    <string name="toast_configure_first">Enter and save the server URL and API key first</string>
+    <string name="toast_sms_permission_required">SMS permission is required to send messages</string>
+
+    <string name="notification_channel_name">Gateway service</string>
+    <string name="notification_title">KumonScan SMS gateway running</string>
+</resources>

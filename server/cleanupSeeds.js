@@ -16,13 +16,19 @@ const SEED_NAMES = [
 ];
 
 async function main() {
+  // Operates on the original center only — seed names belong to the live center.
   const findByName = db.prepare(
     `SELECT id, first_name, last_name, active
      FROM students
-     WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
+     WHERE center_id = (SELECT id FROM centers ORDER BY id ASC LIMIT 1)
+       AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
   );
 
-  const deactivate = db.prepare(`UPDATE students SET active = 0 WHERE id = ? AND active = 1`);
+  const deactivate = db.prepare(
+    `UPDATE students SET active = 0
+     WHERE id = ? AND center_id = (SELECT id FROM centers ORDER BY id ASC LIMIT 1)
+       AND active = 1`
+  );
 
   const summary = { deactivated: [], already_inactive: [], not_found: [] };
 

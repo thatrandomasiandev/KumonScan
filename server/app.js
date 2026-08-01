@@ -1,15 +1,22 @@
 import './loadEnv.js';
-import express from 'express';
+import express, { Router } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import apiRoutes from './routes/api.js';
+import apiRoutes from './routes/index.js';
+import centersRoutes from './routes/centers.routes.js';
+import { resolveCenterFromSlug, resolveDefaultCenter } from './middleware/center.js';
 import { createCorsOptions } from './corsConfig.js';
 import { ensureDb } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// The same API surface is mounted twice: slugged for explicit tenancy and
+// unslugged for the pre-multi-tenant center (see middleware/center.js).
+const WHATSAPP_WEBHOOK_PATH = /^\/api(?:\/c\/[^/]+)?\/webhooks\/whatsapp$/;
+const ROSTER_IMPORT_PATH = /^\/api(?:\/c\/[^/]+)?\/admin\/roster-import$/;
 
 export function createApp() {
   const app = express();
@@ -19,7 +26,22 @@ export function createApp() {
   app.set('trust proxy', 1);
 
   app.use(cors(createCorsOptions()));
-  app.use(express.json({ limit: '8mb' }));
+
+  // Meta signs webhook payloads over the exact raw bytes; keep them for
+  // X-Hub-Signature-256 verification (routes/whatsappWebhook.routes.js).
+  const captureRawBody = (req, _res, buf) => {
+    if (WHATSAPP_WEBHOOK_PATH.test(req.path)) req.rawBody = buf;
+  };
+
+  // Roster upload is the only large payload; everything else stays small.
+  const jsonSmall = express.json({ limit: '256kb', verify: captureRawBody });
+  const jsonLarge = express.json({ limit: '8mb' });
+  app.use((req, res, next) =>
+    ROSTER_IMPORT_PATH.test(req.path)
+      ? jsonLarge(req, res, next)
+      : jsonSmall(req, res, next)
+  );
+
   app.use(cookieParser());
 
   app.use(async (req, res, next) => {
@@ -31,7 +53,21 @@ export function createApp() {
     }
   });
 
-  app.use('/api', apiRoutes);
+  // Platform-level provisioning (superadmin), outside any center scope.
+  app.use('/api/centers', centersRoutes);
+
+  // Explicit tenancy: /api/c/:centerSlug/... (404s on unknown slugs).
+  const slugScoped = Router({ mergeParams: true });
+  slugScoped.use(resolveCenterFromSlug);
+  slugScoped.use(apiRoutes);
+  app.use('/api/c/:centerSlug', slugScoped);
+
+  // Legacy unslugged paths resolve to the original center so existing kiosk
+  // URLs, the gateway phone, and configured webhooks keep working.
+  const defaultScoped = Router();
+  defaultScoped.use(resolveDefaultCenter);
+  defaultScoped.use(apiRoutes);
+  app.use('/api', defaultScoped);
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });

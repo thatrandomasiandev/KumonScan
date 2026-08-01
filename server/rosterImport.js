@@ -1,6 +1,6 @@
 import { parse } from 'csv-parse/sync';
 import { v4 as uuidv4 } from 'uuid';
-import db, { sqlNow } from './db.js';
+import { sqlNow, withRealTransaction } from './db.js';
 import { normalizeName, validateNameField } from './utils/names.js';
 import { normalizeSubjects } from './sessionRules.js';
 import { normalizeScheduleDaysInput, WEEKDAY_SHORTS } from './timeService.js';
@@ -63,7 +63,7 @@ function firstNonBlankValue(record, keys) {
   return '';
 }
 
-function prepareUpdateStudent({
+function updateStudentSql({
   hasSubjectsColumn,
   hasSubjectsValue,
   hasDaysColumn,
@@ -75,18 +75,19 @@ function prepareUpdateStudent({
   if (hasActiveColumn) setClauses.push('active = ?');
   setClauses.push("parent_phone = COALESCE(NULLIF(?, ''), parent_phone)");
 
-  return db.prepare(
-    `UPDATE students
+  return `UPDATE students
      SET ${setClauses.join(', ')}
-     WHERE id = ?`
-  );
+     WHERE id = ? AND center_id = ?`;
 }
 
 function rowLabel(i) {
   return `Row ${i + 2}`;
 }
 
-export async function importRosterFromContent(content) {
+export async function importRosterFromContent(content, centerId) {
+  if (!Number.isInteger(centerId) || centerId < 1) {
+    throw new Error('importRosterFromContent requires a valid centerId');
+  }
   const detectedDelimiter = detectDelimiter(content);
 
   const rawRecords = parse(content, {
@@ -111,16 +112,6 @@ export async function importRosterFromContent(content) {
     };
   }
 
-  const findByName = db.prepare(
-    `SELECT * FROM students WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
-  );
-
-  const insertStudent = db.prepare(
-    `INSERT INTO students
-       (first_name, last_name, qr_code_value, active, enrolled_subjects, schedule_days, parent_phone, registered_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-
   const normalizedHeaderSet = new Set(
     Object.keys(rawRecords[0] || {}).map((key) => key.trim().toLowerCase())
   );
@@ -141,6 +132,11 @@ export async function importRosterFromContent(content) {
     skipped: [],
     errored: [],
   };
+
+  // Pass 1: validate and normalize every row before touching the database.
+  // Skips and normalization errors are collected here; only clean rows reach
+  // the transactional write pass below.
+  const candidates = [];
 
   for (let i = 0; i < rawRecords.length; i++) {
     const normalized = normalizeHeaders(rawRecords[i]);
@@ -182,40 +178,75 @@ export async function importRosterFromContent(content) {
           ])
         : '';
 
-      const existing = await findByName.get(first_name, last_name);
+      candidates.push({
+        first_name,
+        last_name,
+        hasSubjectsValue,
+        enrolled_subjects,
+        schedule_days,
+        active,
+        parent_phone,
+      });
+    } catch (err) {
+      summary.errored.push({ row: label, error: err.message });
+    }
+  }
+
+  // Pass 2: all writes happen in one real transaction. Any database error
+  // (e.g. a mid-batch network failure) rolls back the entire import instead
+  // of leaving the roster half-updated.
+  await withRealTransaction(async (tx) => {
+    const findByName = tx.prepare(
+      `SELECT * FROM students
+       WHERE center_id = ? AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
+    );
+    const insertStudent = tx.prepare(
+      `INSERT INTO students
+         (center_id, first_name, last_name, qr_code_value, active, enrolled_subjects, schedule_days, parent_phone, registered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const row of candidates) {
+      const existing = await findByName.get(centerId, row.first_name, row.last_name);
 
       if (existing) {
-        const updateStudent = prepareUpdateStudent({
-          hasSubjectsColumn,
-          hasSubjectsValue,
-          hasDaysColumn,
-          hasActiveColumn,
-        });
+        const updateStudent = tx.prepare(
+          updateStudentSql({
+            hasSubjectsColumn,
+            hasSubjectsValue: row.hasSubjectsValue,
+            hasDaysColumn,
+            hasActiveColumn,
+          })
+        );
         const params = [];
-        if (hasSubjectsColumn && hasSubjectsValue) params.push(enrolled_subjects);
-        if (hasDaysColumn) params.push(schedule_days);
-        if (hasActiveColumn) params.push(active);
-        params.push(parent_phone, existing.id);
+        if (hasSubjectsColumn && row.hasSubjectsValue) params.push(row.enrolled_subjects);
+        if (hasDaysColumn) params.push(row.schedule_days);
+        if (hasActiveColumn) params.push(row.active);
+        params.push(row.parent_phone, existing.id, centerId);
         await updateStudent.run(...params);
         summary.updated++;
       } else {
         const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
         await insertStudent.run(
-          first_name,
-          last_name,
+          centerId,
+          row.first_name,
+          row.last_name,
           qr_code_value,
-          active,
-          enrolled_subjects,
-          schedule_days,
-          parent_phone || null,
+          row.active,
+          row.enrolled_subjects,
+          row.schedule_days,
+          row.parent_phone || null,
           sqlNow()
         );
         summary.created++;
       }
-    } catch (err) {
-      summary.errored.push({ row: label, error: err.message });
     }
-  }
+  }).catch((err) => {
+    // Counts accumulated before the failure are meaningless after rollback.
+    summary.created = 0;
+    summary.updated = 0;
+    throw err;
+  });
 
   return {
     detectedDelimiter,

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple white message bubble glyph centered in the adaptive icon safe zone. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,36 h40 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-24 l-10,8 v-8 h-6 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z" />
+</vector>

@@ -19,7 +19,7 @@
     border: none !important;
     width: 100% !important;
     height: 100% !important;
-    min-height: 280px !important;
+    min-height: min(280px, 55vw) !important;
     background: transparent !important;
   }
 
@@ -29,14 +29,14 @@
 
   #qr-reader video {
     width: 100% !important;
-    height: 280px !important;
+    height: min(280px, 55vw) !important;
     object-fit: cover !important;
     display: block !important;
     border-radius: 0 !important;
   }
 
   #qr-reader__scan_region {
-    min-height: 280px !important;
+    min-height: min(280px, 55vw) !important;
   }
 
   #qr-reader img[alt="Info icon"],
@@ -97,9 +97,10 @@
     border-radius: 9999px !important;
     font-family: 'Roboto', sans-serif !important;
     font-weight: 500 !important;
-    font-size: 12px !important;
-    min-height: 32px !important;
-    padding: 4px 16px !important;
+    font-size: 14px !important;
+    min-height: 44px !important;
+    min-width: 44px !important;
+    padding: 8px 20px !important;
   }
 
   #qr-reader select {
@@ -108,7 +109,9 @@
     border-color: #C4C6D0 !important;
     border-radius: 8px !important;
     font-family: 'Roboto', sans-serif !important;
-    font-size: 12px !important;
+    font-size: 16px !important;
+    min-height: 44px !important;
+    padding: 8px 12px !important;
   }
 
   .scan-line-md3 {

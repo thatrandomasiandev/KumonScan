@@ -7,18 +7,19 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/MenuOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import BrandMark from './BrandMark';
 import { md3Colors, getElevatedSurface, motion } from '../theme';
+import { centerPath, pagePath } from '../centerPath';
 
-export default function TopAppBar({ onMenuClick, scrolled = false }) {
+export default function TopAppBar({ scrolled = false, centerSlug }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const location = useLocation();
-  const isScanPage = location.pathname === '/';
+  const currentPage = pagePath(location.pathname);
+  const isScanPage = currentPage === '/';
 
   return (
     <AppBar
@@ -31,34 +32,22 @@ export default function TopAppBar({ onMenuClick, scrolled = false }) {
         borderBottom: isScanPage ? 'none' : `1px solid ${md3Colors.outlineVariant}`,
         transition: `box-shadow ${motion.medium1} ${motion.emphasizedDecelerate}`,
         backgroundImage: isScanPage ? 'none' : undefined,
+        top: 0,
       }}
     >
       <Toolbar
         sx={{
-          minHeight: { xs: 64, md: 56 },
-          px: { xs: 1, md: 2 },
+          minHeight: { xs: 56, md: 56 },
+          px: { xs: 1.5, md: 2 },
           justifyContent: isMobile ? 'center' : 'flex-start',
           gap: 1,
         }}
       >
-        {isMobile && !isScanPage && (
-          <IconButton
-            edge="start"
-            aria-label="Open navigation"
-            onClick={onMenuClick}
-            sx={{ position: 'absolute', left: 8, color: md3Colors.onSurface }}
-          >
-            <MenuIcon />
-          </IconButton>
-        )}
-
         <Box
           sx={{
             flex: isMobile ? 1 : 'unset',
             display: 'flex',
             justifyContent: isMobile ? 'center' : 'flex-start',
-            pl: isMobile && !isScanPage ? 5 : 0,
-            pr: isMobile ? 5 : 0,
           }}
         >
           <BrandMark compact variant={isScanPage ? 'onDark' : 'light'} />
@@ -66,43 +55,35 @@ export default function TopAppBar({ onMenuClick, scrolled = false }) {
 
         {!isMobile && <Box sx={{ flex: 1 }} />}
 
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 0.5,
-            position: isMobile ? 'absolute' : 'relative',
-            right: isMobile ? 8 : 'auto',
-          }}
-        >
-          <IconButton
-            aria-label="Dashboard"
-            onClick={() => navigate('/dashboard')}
-            sx={{
-              color:
-                location.pathname === '/dashboard'
-                  ? md3Colors.primary
-                  : isScanPage
-                    ? 'rgba(255,255,255,0.7)'
+        {/* Desktop-only shortcuts; mobile uses BottomNav */}
+        {!isMobile && (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <IconButton
+              aria-label="Dashboard"
+              onClick={() => navigate(centerPath(centerSlug, '/dashboard'))}
+              sx={{
+                color:
+                  currentPage === '/dashboard'
+                    ? md3Colors.primary
                     : md3Colors.onSurfaceVariant,
-            }}
-          >
-            <BarChartOutlinedIcon />
-          </IconButton>
-          <IconButton
-            aria-label="Admin"
-            onClick={() => navigate('/admin')}
-            sx={{
-              color:
-                location.pathname === '/admin'
-                  ? md3Colors.primary
-                  : isScanPage
-                    ? 'rgba(255,255,255,0.7)'
+              }}
+            >
+              <BarChartOutlinedIcon />
+            </IconButton>
+            <IconButton
+              aria-label="Admin"
+              onClick={() => navigate(centerPath(centerSlug, '/admin'))}
+              sx={{
+                color:
+                  currentPage === '/admin'
+                    ? md3Colors.primary
                     : md3Colors.onSurfaceVariant,
-            }}
-          >
-            <SettingsOutlinedIcon />
-          </IconButton>
-        </Box>
+              }}
+            >
+              <SettingsOutlinedIcon />
+            </IconButton>
+          </Box>
+        )}
       </Toolbar>
     </AppBar>
   );

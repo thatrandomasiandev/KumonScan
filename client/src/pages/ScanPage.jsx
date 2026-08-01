@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -20,12 +20,14 @@ import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
+import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { api } from '../api';
 import BrandMark from '../components/BrandMark';
 import { md3Colors, motion, shape } from '../theme';
+import { centerPath } from '../centerPath';
 
 const SCAN_COOLDOWN_MS = 3000;
 const SUCCESS_DISMISS_MS = 4000;
@@ -70,7 +72,7 @@ function SheetDragHandle() {
       sx={{
         width: 32,
         height: GRID,
-        borderRadius: '2px',
+        borderRadius: `${shape.extraSmall}px`,
         bgcolor: md3Colors.onSurfaceVariant,
         opacity: 0.4,
         mx: 'auto',
@@ -183,7 +185,9 @@ function ViewfinderCard({ children, cameraReady, reducedMotion }) {
           sx={{
             width: '100%',
             maxWidth: 280,
-            height: 280,
+            aspectRatio: '1 / 1',
+            height: 'auto',
+            maxHeight: { xs: 'min(280px, 55vw)', md: 280 },
             mx: 'auto',
             borderRadius: `${shape.large}px`,
             overflow: 'hidden',
@@ -328,7 +332,7 @@ function BottomSheet({
           borderTopRightRadius: `${shape.extraLarge}px`,
           px: 3,
           pt: 2,
-          pb: 5,
+          pb: 'max(40px, calc(16px + env(safe-area-inset-bottom)))',
           maxWidth: halfPage ? '100%' : 480,
           mx: 'auto',
           ...(halfPage && {
@@ -523,9 +527,10 @@ function ErrorSheet({ onDismiss, onRegister }) {
   );
 }
 
-function ScanMenuDrawer({ open, onClose, navigate, currentPath }) {
+function ScanMenuDrawer({ open, onClose, navigate, currentPath, centerSlug }) {
   const items = [
     { label: 'Scan', path: '/', icon: QrCodeScannerOutlinedIcon },
+    { label: 'Desk', path: '/desk', icon: DeskOutlinedIcon },
     { label: 'Register', path: '/register', icon: PersonAddOutlinedIcon },
     { label: 'Dashboard', path: '/dashboard', icon: BarChartOutlinedIcon },
     { label: 'Admin', path: '/admin', icon: SettingsOutlinedIcon },
@@ -544,7 +549,7 @@ function ScanMenuDrawer({ open, onClose, navigate, currentPath }) {
               key={path}
               selected={currentPath === path}
               onClick={() => {
-                navigate(path);
+                navigate(centerPath(centerSlug, path));
                 onClose();
               }}
               sx={{ minHeight: 48 }}
@@ -563,6 +568,7 @@ function ScanMenuDrawer({ open, onClose, navigate, currentPath }) {
 
 export default function ScanPage() {
   const navigate = useNavigate();
+  const { centerSlug } = useParams();
   const reducedMotion = useReducedMotion();
   const [result, setResult] = useState(null);
   const [scanError, setScanError] = useState(null);
@@ -754,7 +760,8 @@ export default function ScanPage() {
         display: 'flex',
         flexDirection: 'column',
         bgcolor: md3Colors.background,
-        overflow: 'hidden',
+        overflow: 'auto',
+        WebkitOverflowScrolling: 'touch',
         minHeight: 0,
       }}
     >
@@ -764,6 +771,7 @@ export default function ScanPage() {
         onClose={() => setMenuOpen(false)}
         navigate={navigate}
         currentPath="/"
+        centerSlug={centerSlug}
       />
 
       <Box
@@ -774,10 +782,11 @@ export default function ScanPage() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: { xs: 'flex-start', sm: 'center' },
           px: 2,
-          pb: { xs: 12, md: 2 },
-          overflow: 'hidden',
+          pt: { xs: 2, sm: 0 },
+          pb: { xs: 2, md: 2 },
+          overflow: 'visible',
         }}
       >
         <Box
@@ -787,14 +796,19 @@ export default function ScanPage() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: GRID * 6,
+            gap: { xs: GRID * 4, sm: GRID * 6 },
           }}
         >
-          <Box sx={{ textAlign: 'center' }}>
+          <Box sx={{ textAlign: 'center', px: 1 }}>
             <Typography
               variant="displaySmall"
               component="h2"
-              sx={{ color: md3Colors.onSurface, mb: 1 }}
+              sx={{
+                color: md3Colors.onSurface,
+                mb: 1,
+                fontSize: { xs: '28px', sm: '36px' },
+                lineHeight: { xs: '36px', sm: '44px' },
+              }}
             >
               Check in or out
             </Typography>
@@ -847,7 +861,7 @@ export default function ScanPage() {
                 </Button>
                 <Button
                   variant="text"
-                  onClick={() => navigate('/register')}
+                  onClick={() => navigate(centerPath(centerSlug, '/register'))}
                   sx={{ color: md3Colors.onErrorContainer }}
                 >
                   Get a QR code
@@ -889,7 +903,7 @@ export default function ScanPage() {
           onDismiss={dismissSheet}
           onRegister={() => {
             setScanError(null);
-            navigate('/register');
+            navigate(centerPath(centerSlug, '/register'));
           }}
         />
       )}

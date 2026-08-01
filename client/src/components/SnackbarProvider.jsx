@@ -54,11 +54,16 @@ export default function SnackbarProvider({ children }) {
           ) : undefined
         }
         sx={{
+          bottom: {
+            xs: 'calc(72px + env(safe-area-inset-bottom))',
+            md: 24,
+          },
           '& .MuiSnackbarContent-root': {
             bgcolor: md3Colors.inverseSurface,
             color: md3Colors.inverseOnSurface,
             borderRadius: '4px',
-            minWidth: 288,
+            minWidth: { xs: 'auto', sm: 288 },
+            maxWidth: 'calc(100vw - 32px)',
           },
         }}
       />

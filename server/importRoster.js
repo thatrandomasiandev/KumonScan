@@ -27,14 +27,23 @@ if (!fs.existsSync(resolvedPath)) {
 }
 
 async function main() {
+  const center = await db
+    .prepare('SELECT id, slug FROM centers WHERE active = 1 ORDER BY id ASC LIMIT 1')
+    .get();
+  if (!center) {
+    console.error('No center is provisioned — run the server once to seed the default center');
+    process.exit(1);
+  }
+
   let result;
   try {
     const content = fs.readFileSync(resolvedPath, 'utf8');
-    result = await importRosterFromContent(content);
+    result = await importRosterFromContent(content, center.id);
   } catch (err) {
     console.error(`Roster import failed: ${err.message}`);
     process.exit(1);
   }
+  console.log(`Importing into center "${center.slug}"`);
 
   const { totalProcessed, delimiterLabel, summary } = result;
   const anomalies = summary.skipped.length + summary.errored.length;

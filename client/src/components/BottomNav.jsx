@@ -4,12 +4,15 @@ import QrCodeScannerOutlinedIcon from '@mui/icons-material/QrCodeScannerOutlined
 import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
+import { centerPath, pagePath } from '../centerPath';
 
 const navItems = [
   { path: '/', label: 'Scan', icon: QrCodeScannerOutlinedIcon },
   { path: '/desk', label: 'Desk', icon: DeskOutlinedIcon },
   { path: '/dashboard', label: 'Dashboard', icon: BarChartOutlinedIcon },
+  { path: '/messages', label: 'Messages', icon: ForumOutlinedIcon }, // agent-1-messaging
   { path: '/admin', label: 'Admin', icon: SettingsOutlinedIcon },
 ];
 
@@ -68,11 +71,12 @@ function NavItem({ path, label, icon: Icon, active, onClick }) {
   );
 }
 
-export default function BottomNav() {
+export default function BottomNav({ centerSlug }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const currentPage = pagePath(location.pathname);
 
-  if (location.pathname === '/register') return null;
+  if (currentPage === '/register') return null;
 
   return (
     <Box
@@ -98,8 +102,8 @@ export default function BottomNav() {
           path={path}
           label={label}
           icon={icon}
-          active={location.pathname === path}
-          onClick={() => navigate(path)}
+          active={currentPage === path}
+          onClick={() => navigate(centerPath(centerSlug, path))}
         />
       ))}
     </Box>

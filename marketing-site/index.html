@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KumonScan — attendance for Kumon centers, timed to the minute</title>
+    <meta
+      name="description"
+      content="KumonScan replaces the paper sign-in sheet at Kumon learning centers: desk and QR check-in, session timers against the 30/60-minute rule, overtime flags, absence lists, and CSV/PDF attendance reports."
+    />
+    <meta property="og:title" content="KumonScan" />
+    <meta
+      property="og:description"
+      content="Attendance for Kumon centers, timed to the minute. Desk and QR check-in, 30/60-minute session timers, overtime flags, and attendance reports."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Roboto+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container nav-row">
+        <a class="brand" href="#top" aria-label="KumonScan home">
+          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 4h5v2H6v3H4V4zm11 0h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z"
+              fill="currentColor"
+            />
+            <path d="M9 12l2.2 2.2L15.5 9.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>KumonScan</span>
+        </a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="#how">Check-in</a>
+          <a href="#why">Why KumonScan</a>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+        </nav>
+        <a class="btn btn-filled" href="#demo">Request a demo</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ============================ HERO ============================ -->
+      <section class="hero" id="top">
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <h1>Attendance for Kumon centers, timed to the minute.</h1>
+            <p class="lede">
+              KumonScan replaces the paper sign-in sheet. Staff check students in by name or QR
+              code, every session is timed against the 30/60-minute rule, and overtime turns red
+              at the front desk.
+            </p>
+            <div class="hero-ctas">
+              <a class="btn btn-filled btn-large" href="#demo">Request a demo</a>
+              <a class="btn btn-tonal btn-large" href="#how">See how it works</a>
+            </div>
+            <p class="hero-note">Runs in the browser on the tablet or laptop already at your front desk.</p>
+          </div>
+
+          <div class="hero-visual" aria-hidden="true">
+            <div class="desk-mock">
+              <div class="desk-mock-bar">
+                <span class="desk-mock-title">On the floor</span>
+                <span class="desk-mock-clock">3:42&nbsp;PM</span>
+              </div>
+              <ul class="desk-rows">
+                <li class="desk-row">
+                  <span class="desk-name">Maya R.</span>
+                  <span class="desk-subjects"><span class="chip chip-math">Math</span></span>
+                  <span class="desk-in">in 3:20</span>
+                  <span class="desk-timer">22 min</span>
+                </li>
+                <li class="desk-row">
+                  <span class="desk-name">Daniel K.</span>
+                  <span class="desk-subjects"
+                    ><span class="chip chip-math">Math</span><span class="chip chip-reading">Reading</span></span
+                  >
+                  <span class="desk-in">in 2:48</span>
+                  <span class="desk-timer">54 min</span>
+                </li>
+                <li class="desk-row desk-row-overtime">
+                  <span class="desk-name">Ethan L.</span>
+                  <span class="desk-subjects"><span class="chip chip-reading">Reading</span></span>
+                  <span class="desk-in">in 3:04</span>
+                  <span class="desk-timer">+8 min</span>
+                </li>
+                <li class="desk-row">
+                  <span class="desk-name">Sofia M.</span>
+                  <span class="desk-subjects"><span class="chip chip-math">Math</span></span>
+                  <span class="desk-in">in 3:31</span>
+                  <span class="desk-timer">11 min</span>
+                </li>
+              </ul>
+              <div class="desk-mock-footer">
+                <span>4 on the floor</span>
+                <span>17 completed today</span>
+              </div>
+            </div>
+            <p class="mock-caption">
+              The Desk view: open sessions, elapsed time, overtime flagged in red with the exact
+              overage.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================= TWO WAYS IN ========================= -->
+      <section class="section" id="how">
+        <div class="container">
+          <h2 class="reveal">Two ways in. One record.</h2>
+          <p class="section-lede reveal">
+            Some students carry their QR code, some do not, and the record has to hold up either
+            way. Both paths write the same timeapi.io-stamped session.
+          </p>
+          <div class="paths">
+            <article class="path reveal">
+              <h3>From the desk</h3>
+              <p>
+                Staff search the roster by name, pick Math, Reading, or Both, and tap Check in.
+                The subject choice sets the allowance: 30 minutes for one subject, 60 for both.
+                Check-out is one tap on the same row.
+              </p>
+              <ol class="steps">
+                <li>Search the student's name</li>
+                <li>Pick Math, Reading, or Both</li>
+                <li>The timer starts on the floor list</li>
+              </ol>
+            </article>
+            <article class="path reveal">
+              <h3>From the kiosk</h3>
+              <p>
+                Students scan their own QR code on a shared tablet. The first scan of the day
+                checks them in; scanning again checks them out. Duplicate reads inside 3 seconds
+                are ignored, so an excited eight-year-old can't check in twice.
+              </p>
+              <div class="kiosk-frame" aria-hidden="true">
+                <svg viewBox="0 0 96 96" class="kiosk-qr">
+                  <path
+                    fill="currentColor"
+                    d="M12 12h28v28H12V12zm8 8v12h12V20H20zm36-8h28v28H56V12zm8 8v12h12V20H64zM12 56h28v28H12V56zm8 8v12h12V64H20zm42-8h6v6h-6v-6zm10 0h6v6h-6v-6zm-10 10h6v6h-6v-6zm10 10h6v6h-6v-6zm10-10h6v6h-6v-6zm0 10h6v16h-6V76zm-20 6h6v10h-6V82z"
+                  />
+                </svg>
+                <span class="kiosk-corner kiosk-corner-tl"></span>
+                <span class="kiosk-corner kiosk-corner-tr"></span>
+                <span class="kiosk-corner kiosk-corner-bl"></span>
+                <span class="kiosk-corner kiosk-corner-br"></span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== THE 30/60 RULE ======================== -->
+      <section class="section rule-band" id="why">
+        <div class="container rule-grid">
+          <div class="rule-copy reveal">
+            <h2>Built around Kumon's 30/60-minute session rule.</h2>
+            <p>
+              A Kumon session runs 30 minutes for one subject and 60 for both. KumonScan times
+              every open session against that allowance. When a student passes it, the row turns
+              red and shows the exact overage, like +8 min, so staff see who to release without
+              doing clock math.
+            </p>
+            <p>
+              Timestamps come from timeapi.io, never the device clock. If timeapi.io is
+              unreachable, check-in and check-out are rejected rather than recorded with a guess.
+              A parent asking about last month's sessions gets times the center can stand behind.
+            </p>
+          </div>
+          <div class="rule-visual reveal" aria-hidden="true">
+            <div class="timer-card">
+              <span class="timer-label">Math</span>
+              <span class="timer-value">22 / 30 min</span>
+            </div>
+            <div class="timer-card">
+              <span class="timer-label">Math + Reading</span>
+              <span class="timer-value">54 / 60 min</span>
+            </div>
+            <div class="timer-card timer-card-over">
+              <span class="timer-label">Reading</span>
+              <span class="timer-value">+8 min over</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================== FEATURES =========================== -->
+      <section class="section" id="features">
+        <div class="container">
+          <h2 class="reveal">What's inside today.</h2>
+          <p class="section-lede reveal">
+            Everything below is shipped and running in the product, not a roadmap.
+          </p>
+          <dl class="ledger">
+            <div class="ledger-row reveal">
+              <dt>Absence lists</dt>
+              <dd>
+                Each student has scheduled weekdays. Desk generates the list of students expected
+                that day who never checked in, so follow-up calls happen the same afternoon.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>Attendance reports</dt>
+              <dd>
+                Monthly or rolling 12-month exports as CSV or PDF: visits, total minutes, and
+                overtime count per student. The dashboard charts average check-ins per weekday
+                over the past 28 days against the scheduled roster.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>CRM roster import</dt>
+              <dd>
+                Upload the Kumon CRM student export (TSV or CSV). Matching names update, new names
+                are created. The export has no schedule column, so bulk apply sets weekdays (MWF,
+                TTh, Mon–Fri, or custom) across the roster in one step.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>Parent notifications and replies</dt>
+              <dd>
+                Check-in and check-out texts go to parents through an Android phone at the center
+                running the KumonScan gateway app. Replies land in Admin as a two-way thread per
+                student. No per-message SMS vendor fees.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>Staff time clock and payroll</dt>
+              <dd>
+                Staff clock in and out with the same timeapi.io timestamps as student sessions,
+                one open shift per person enforced by the database. The payroll report totals
+                hours and gross pay from hourly rates over any date range, exported as CSV.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>Capacity by weekday</dt>
+              <dd>
+                Set seats per weekday in Admin. Desk shows today's expected students against
+                capacity and flags the day when it's oversubscribed.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>Remote sessions</dt>
+              <dd>
+                Remote check-ins are recorded alongside in-person ones with the same timers,
+                overtime flags, and reports, marked with a mode chip on the desk roster.
+              </dd>
+            </div>
+            <div class="ledger-row reveal">
+              <dt>Admin access control</dt>
+              <dd>
+                Staff pages sit behind a password with httpOnly session cookies and rate-limited
+                login. The kiosk stays open for students; the records do not.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <!--
+        TESTIMONIALS PLACEHOLDER
+        Do not publish fabricated quotes. When a real center has used KumonScan
+        and agreed to be quoted, add a short quotes section here:
+        name, center location, one specific sentence about a mechanism
+        (absence list, overtime flags, report exports), with written permission.
+      -->
+
+      <!-- ========================= PRICING =========================== -->
+      <section class="section pricing" id="pricing">
+        <div class="container pricing-inner reveal">
+          <h2>Pricing</h2>
+          <p>
+            Per-center pricing is not published yet; it's being set with the first centers
+            onboarding now. Tell us your center's size below and we'll send a quote. No pricing
+            page theater, no fake tiers.
+          </p>
+          <a class="btn btn-tonal" href="#demo">Request pricing</a>
+        </div>
+      </section>
+
+      <!-- ======================= LEAD CAPTURE ======================== -->
+      <section class="section demo-band" id="demo">
+        <div class="container demo-grid">
+          <div class="demo-copy reveal">
+            <h2>See it on your own roster.</h2>
+            <p>
+              There's no self-serve signup yet; setup is hands-on while the product is young.
+              Leave your details and we'll reach out to schedule a walkthrough with your own CRM
+              export loaded.
+            </p>
+          </div>
+          <form class="lead-form reveal" id="lead-form" novalidate>
+            <div class="field">
+              <label for="lead-name">Your name</label>
+              <input id="lead-name" name="name" type="text" autocomplete="name" required maxlength="200" />
+            </div>
+            <div class="field">
+              <label for="lead-center">Center name</label>
+              <input
+                id="lead-center"
+                name="center_name"
+                type="text"
+                autocomplete="organization"
+                placeholder="e.g. Kumon of Cedar Park"
+                required
+                maxlength="200"
+              />
+            </div>
+            <div class="field">
+              <label for="lead-email">Email</label>
+              <input id="lead-email" name="email" type="email" autocomplete="email" required maxlength="200" />
+            </div>
+            <div class="field">
+              <label for="lead-size">Center size</label>
+              <select id="lead-size" name="center_size" required>
+                <option value="" disabled selected>Number of enrolled students</option>
+                <option value="under-50">Fewer than 50</option>
+                <option value="50-150">50 to 150</option>
+                <option value="150-300">150 to 300</option>
+                <option value="over-300">More than 300</option>
+              </select>
+            </div>
+            <!-- Honeypot: hidden from people, tempting to bots -->
+            <div class="field field-website" aria-hidden="true">
+              <label for="lead-website">Website</label>
+              <input id="lead-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+            </div>
+            <button class="btn btn-filled btn-large" type="submit">Request a demo</button>
+            <p class="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-row">
+        <div class="footer-brand">
+          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 4h5v2H6v3H4V4zm11 0h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z"
+              fill="currentColor"
+            />
+            <path d="M9 12l2.2 2.2L15.5 9.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>KumonScan</span>
+        </div>
+        <nav class="footer-nav" aria-label="Footer">
+          <a href="#how">Check-in</a>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#demo">Request a demo</a>
+        </nav>
+        <p class="footer-legal">
+          KumonScan is an independent product built for Kumon franchise centers. It is not
+          affiliated with, endorsed by, or sponsored by Kumon North America or the Kumon Institute
+          of Education. &copy; 2026 KumonScan.
+        </p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

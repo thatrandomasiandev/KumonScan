@@ -1,14 +1,14 @@
 import dotenv from 'dotenv';
+import { getRequestCenter } from './requestContext.js';
 
 dotenv.config();
-
-const CENTER_TIMEZONE = process.env.CENTER_TIMEZONE || 'America/Los_Angeles';
 
 /** Fail fast when timeapi.io hangs instead of blocking check-in/out indefinitely. */
 export const TIME_API_TIMEOUT_MS = 5_000;
 
 export async function fetchAuthoritativeTime() {
-  const url = `https://timeapi.io/api/time/current/zone?timeZone=${encodeURIComponent(CENTER_TIMEZONE)}`;
+  const timezone = getCenterTimezone();
+  const url = `https://timeapi.io/api/time/current/zone?timeZone=${encodeURIComponent(timezone)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIME_API_TIMEOUT_MS);
 
@@ -28,7 +28,7 @@ export async function fetchAuthoritativeTime() {
 
     return {
       iso: dateTime,
-      timezone: CENTER_TIMEZONE,
+      timezone,
     };
   } catch (err) {
     if (err?.name === 'AbortError') {
@@ -40,25 +40,33 @@ export async function fetchAuthoritativeTime() {
   }
 }
 
+/**
+ * The active center's timezone. Inside a request this is the resolved
+ * center's `timezone` column; outside a request (CLI scripts, migrations,
+ * tests calling services directly) it falls back to the CENTER_TIMEZONE env
+ * var, matching pre-multi-tenant behavior.
+ */
 export function getCenterTimezone() {
-  return CENTER_TIMEZONE;
+  return (
+    getRequestCenter()?.timezone || process.env.CENTER_TIMEZONE || 'America/Los_Angeles'
+  );
 }
 
 export function formatInTimezone(isoString, options = {}) {
   const date = new Date(isoString);
   return date.toLocaleString('en-US', {
-    timeZone: CENTER_TIMEZONE,
+    timeZone: getCenterTimezone(),
     ...options,
   });
 }
 
 export function getDateInTimezone(isoString) {
   const date = new Date(isoString);
-  return date.toLocaleDateString('en-CA', { timeZone: CENTER_TIMEZONE });
+  return date.toLocaleDateString('en-CA', { timeZone: getCenterTimezone() });
 }
 
 export function getTodayInTimezone() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: CENTER_TIMEZONE });
+  return new Date().toLocaleDateString('en-CA', { timeZone: getCenterTimezone() });
 }
 
 export function isWithinPastDays(isoString, days) {
@@ -95,14 +103,15 @@ export function getWeekdayShortForDate(dateYmd) {
     throw new Error('date must be YYYY-MM-DD');
   }
 
+  const timezone = getCenterTimezone();
   const [y, m, d] = dateYmd.split('-').map(Number);
   // Scan a 48h window so DST and zone offsets still land on the civil date.
   for (let hour = 0; hour < 48; hour++) {
     const instant = new Date(Date.UTC(y, m - 1, d - 1, hour, 30, 0));
-    const localYmd = instant.toLocaleDateString('en-CA', { timeZone: CENTER_TIMEZONE });
+    const localYmd = instant.toLocaleDateString('en-CA', { timeZone: timezone });
     if (localYmd === dateYmd) {
       return instant.toLocaleDateString('en-US', {
-        timeZone: CENTER_TIMEZONE,
+        timeZone: timezone,
         weekday: 'short',
       });
     }
@@ -110,7 +119,7 @@ export function getWeekdayShortForDate(dateYmd) {
 
   const fallback = new Date(Date.UTC(y, m - 1, d, 20, 0, 0));
   return fallback.toLocaleDateString('en-US', {
-    timeZone: CENTER_TIMEZONE,
+    timeZone: timezone,
     weekday: 'short',
   });
 }
