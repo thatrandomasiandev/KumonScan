@@ -1,0 +1,62 @@
+---
+description: Mandatory coordination protocol for all agents working in this repo. Worktree isolation, frequent commits, shared test-db lock, coordination ledger, ownership boundaries. Exists because seven workstreams once shared one uncommitted tree and two processes corrupted the same test run.
+alwaysApply: true
+---
+
+# Multi-Agent Coordination Protocol
+
+Every rule here is mandatory, not advisory. The shared coordination directory lives in the primary checkout and is the same physical files for every worktree. Resolve it from anywhere with:
+
+```bash
+COORD="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.agent-coordination"
+```
+
+`$COORD` is gitignored by design: it is live cross-worktree state, not versioned code. Never commit it.
+
+## 0. Before starting: read the ledger, check quiescence
+
+Read `$COORD/status.md` first. It lists every agent, its branch, status, and the files it owns. Then run:
+
+```bash
+bash scripts/check-tree-quiescence.sh
+```
+
+It reports recent file modifications, `.git/index.lock` age, the test-db lock holder, agents marked `in-progress`, and running dev/test processes. Exit code 1 means activity was detected; read the report before proceeding.
+
+## 1. Work in a dedicated worktree off the tip of `main`
+
+```bash
+git worktree add -b agent-<short-task-slug> "../KumonScan-agent-<short-task-slug>" main
+```
+
+- Branch off `main`'s current tip only. Never branch off another agent's in-progress branch.
+- Never do multi-file feature work directly in the primary checkout (`KumonScan/`). The primary checkout is for triage, merges, and reading shared state only.
+- When your branch is merged, remove the worktree: `git worktree remove "../KumonScan-agent-<slug>"`.
+
+## 2. Commit early and often
+
+Commit after each logical unit: a new file, a passing test, a completed function. Nothing sits uncommitted for more than a few minutes of active work. If you are about to switch files, commit what you have. A `WIP:` prefix is acceptable; an uncommitted tree is not. This is the rule that prevents the "seven workstreams in one indistinguishable uncommitted tree" failure.
+
+## 3. Register in the ledger; keep your row current
+
+On start, append a row to `$COORD/status.md`:
+
+```markdown
+| agent-<slug> | agent-<slug> | <one-line task> | in-progress | <files/dirs you own> | <UTC timestamp> |
+```
+
+Update the row on every major milestone and set `Status` to `done` or `blocked: <reason>` when you stop. Timestamps are UTC ISO-8601 minutes (`date -u +%Y-%m-%dT%H:%MZ`, e.g. `2026-08-01T03:05Z`).
+
+## 4. Never run tests without the test-db lock
+
+All tests hit one shared Neon test branch (`TEST_DATABASE_URL`). Two concurrent runs corrupt each other. Never call `npm test` directly. Always:
+
+```bash
+AGENT_ID=agent-<slug> bash server/scripts/with-test-db-lock.sh
+```
+
+The wrapper atomically acquires `$COORD/test-db.lock`, runs the suite, and releases the lock. Locks older than 10 minutes are treated as abandoned and reclaimed automatically. If the lock is held and fresh, the wrapper exits 75 without running tests: do non-test work and retry later. Do not delete another agent's fresh lock by hand.
+
+## 5. Stay inside your declared ownership
+
+The `Owns` column of your ledger row is a contract. If a task requires touching a file another agent owns, or any file outside your declared set, stop, update your row to `blocked: needs <file> owned by <agent>`, and flag it to the user. Do not edit and hope.
