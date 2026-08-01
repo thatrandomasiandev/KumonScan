@@ -122,6 +122,17 @@ export const api = {
       body: JSON.stringify({ days, scope }),
     }),
 
+  getDigests: ({ student_id } = {}) => {
+    const qs = student_id ? `?student_id=${encodeURIComponent(student_id)}` : '';
+    return request(`/admin/digests${qs}`);
+  },
+
+  sendDigestsNow: ({ student_id } = {}) =>
+    request('/admin/digests/send-now', {
+      method: 'POST',
+      body: JSON.stringify(student_id ? { student_id } : {}),
+    }),
+
   getDashboard: () => request('/dashboard'),
 
   getTime: () => request('/time'),
