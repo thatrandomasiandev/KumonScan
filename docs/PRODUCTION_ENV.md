@@ -65,6 +65,16 @@ These are referenced on branches the integration captain has not yet reintegrate
 | `STRIPE_WEBHOOK_SECRET` | `agent-billing` | Stripe webhook signature verification. | Webhook reconciliation fails closed. |
 | `DEMO_MODE` | `agent-demo` | Marks a deployment as the sales demo (guarded seed, nightly reset). | Demo features disabled. Never set on the production deployment. |
 
+## Security pass (2026-08-01, at `b8f51ea`)
+
+**Dependency audits.** `npm audit`: `server/` 0 vulnerabilities, `marketing-site/` 0 vulnerabilities. `client/` reports 2 high: `react-router` 7.12.0-8.2.0 via `react-router-dom` 7.18.2 (GHSA-qwww-vcr4-c8h2, "RSC Mode CSRF Bypass"). Analysis: the app already runs the newest `react-router-dom` release that exists (7.18.2); no `react-router-dom` version depends on the patched core (`react-router` 8.3.0), so npm's only offered fix is a breaking downgrade to 7.11.0. The advisory's vulnerable path is RSC-mode server-action execution; this client is a declarative `<BrowserRouter>` SPA (`client/src/main.jsx`) with no RSC, loaders, or actions, so the path is unreachable. Closing the audit warning permanently requires migrating imports from `react-router-dom` to `react-router@8`, a client-wide code change to schedule, not an emergency.
+
+**CORS.** `ALLOWED_ORIGINS` is unset in production terms: `server/corsConfig.js` falls back to localhost dev origins. Production on Vercel is same-origin (client and API share one domain), so no allowlist entry is needed for the main app. Any cross-origin browser surface (a separately-hosted parent PWA or marketing page calling the app API) requires the real production origin in `ALLOWED_ORIGINS`. The real domain is a launch decision; do not guess it.
+
+**Rate limiting under tenancy.** The login (10/min), registration (10/min), and scan (60/min) limiters are module-level singletons keyed by client IP (`express-rate-limit` default). The same router instances serve both `/api/c/:centerSlug/...` and legacy `/api/...` mounts (`server/app.js`), so rotating center slugs hits the same per-IP bucket: no bypass. `app.set('trust proxy', 1)` makes `req.ip` the real client IP behind Vercel's proxy, so limits are per-visitor, not one shared bucket. Known limitation: the store is in-memory per serverless instance, so limits reset on cold starts and are per-instance; acceptable as brute-force friction, not a hard quota.
+
+**Admin session cookie.** `httpOnly`, `sameSite: 'lax'`, `secure` when `NODE_ENV=production`, 7-day expiry, HMAC-signed and bound to one center id, with a revocation denylist on logout (`server/middleware/auth.js`, `auth.routes.js`). Correct for a same-origin deployment on any single production domain, including a custom domain on Vercel. Revisit only if admin UI and API ever split across origins ( `sameSite: 'lax'` would then block the cookie).
+
 ## Secrets audit (2026-08-01)
 
 - Working tree at `b8f51ea`: pattern scan for Stripe keys (`sk_live_`, `sk_test_`, `whsec_`), AWS keys, Slack tokens, private-key blocks, and credentialed Neon connection strings found nothing outside placeholder values in `.env.example`.
