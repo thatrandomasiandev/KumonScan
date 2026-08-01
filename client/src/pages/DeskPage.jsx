@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   Paper,
   TextField,
   ToggleButton,
@@ -22,6 +23,8 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { api, formatDuration, formatTime } from '../api';
+import { resourcesApi } from '../resourcesApi'; // agent-5-resources
+import { caregiversApi } from '../caregiversApi'; // agent-2-pickup-auth
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { useSnackbar } from '../components/SnackbarProvider';
@@ -325,6 +328,13 @@ export default function DeskPage() {
   const [submitting, setSubmitting] = useState(false);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
+  // agent-5-resources: optional materials logging at check-out. null = catalog
+  // not fetched yet; [] = fetched but empty/unavailable (input stays hidden).
+  const [materialsCatalog, setMaterialsCatalog] = useState(null);
+  const [materialsUsed, setMaterialsUsed] = useState([]);
+  // agent-2-pickup-auth
+  const [pickupCaregivers, setPickupCaregivers] = useState([]);
+  const [pickedUpBy, setPickedUpBy] = useState('');
   const [tick, setTick] = useState(0);
   const [absent, setAbsent] = useState(null);
   const [absentLoading, setAbsentLoading] = useState(false);
@@ -400,6 +410,41 @@ export default function DeskPage() {
     };
   }, [loadData]);
 
+  // agent-5-resources
+  useEffect(() => {
+    if (!checkoutTarget) return;
+    setMaterialsUsed([]);
+    if (materialsCatalog === null) {
+      resourcesApi
+        .getResources()
+        .then((data) => setMaterialsCatalog(data.resources || []))
+        .catch(() => setMaterialsCatalog([]));
+    }
+  }, [checkoutTarget, materialsCatalog]);
+
+  // agent-2-pickup-auth: load approved caregivers when the check-out dialog
+  // opens. Failures fall back to an empty list — logging a pickup is optional
+  // and must never block the check-out itself.
+  useEffect(() => {
+    setPickedUpBy('');
+    if (!checkoutTarget) {
+      setPickupCaregivers([]);
+      return undefined;
+    }
+    let cancelled = false;
+    caregiversApi
+      .list(checkoutTarget.id)
+      .then((data) => {
+        if (!cancelled) setPickupCaregivers(data.caregivers || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPickupCaregivers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutTarget]);
+
   useEffect(() => {
     if (!selected) return;
     const enrolled = selected.enrolled_subjects;
@@ -435,14 +480,45 @@ export default function DeskPage() {
     if (!checkoutTarget) return;
     setCheckingOut(true);
     try {
-      const result = await api.checkOut({ session_id: checkoutTarget.session_id });
+      // agent-2-pickup-auth: optional picked_up_by on the same check-out call
+      const result = pickedUpBy
+        ? await caregiversApi.checkOut({
+            session_id: checkoutTarget.session_id,
+            picked_up_by: pickedUpBy,
+          })
+        : await api.checkOut({ session_id: checkoutTarget.session_id });
+
+      // agent-5-resources: materials logging is best-effort after check-out
+      // succeeds — a failed log warns but never blocks or reverts the check-out.
+      let materialsNote = '';
+      if (materialsUsed.length > 0) {
+        const outcomes = await Promise.allSettled(
+          materialsUsed.map((resource) =>
+            resourcesApi.useResource(resource.id, {
+              student_id: checkoutTarget.id,
+              session_id: checkoutTarget.session_id,
+              quantity: 1,
+            })
+          )
+        );
+        const failed = outcomes.filter((o) => o.status === 'rejected');
+        materialsNote =
+          failed.length > 0
+            ? ` · ${failed.length} material log${failed.length === 1 ? '' : 's'} failed`
+            : ` · ${materialsUsed.length} material${materialsUsed.length === 1 ? '' : 's'} logged`;
+      }
+
       const mins = Math.round(result.session.duration_minutes || 0);
       const over =
         result.session.is_overtime && result.session.overtime_minutes > 0
           ? ` (+${result.session.overtime_minutes} over)`
           : '';
-      showSnackbar(`${result.student.name} checked out · ${mins} min${over}`);
+      showSnackbar(`${result.student.name} checked out · ${mins} min${over}${materialsNote}`);
       setCheckoutTarget(null);
+      setMaterialsUsed([]);
+      setMaterialsCatalog(null);
+      setPickedUpBy('');
+      setPickupCaregivers([]);
       await loadData();
     } catch (err) {
       showSnackbar(err.message);
@@ -880,6 +956,52 @@ export default function DeskPage() {
               : ''}
             . Session length is stamped from timeapi.io on check-out.
           </Typography>
+          {/* agent-2-pickup-auth */}
+          {pickupCaregivers.length > 0 && (
+            <TextField
+              select
+              label="Picked up by — optional"
+              value={pickedUpBy}
+              onChange={(e) => setPickedUpBy(e.target.value)}
+              fullWidth
+              size="small"
+              disabled={checkingOut}
+              helperText="Leave unselected if nobody is logging the pickup"
+              sx={{ mt: 2.5, '& .MuiInputBase-root': { minHeight: 44 } }}
+            >
+              <MenuItem value="" sx={{ minHeight: 44 }}>
+                Not recorded
+              </MenuItem>
+              {pickupCaregivers.map((caregiver) => (
+                <MenuItem key={caregiver.id} value={caregiver.id} sx={{ minHeight: 44 }}>
+                  {caregiver.name}
+                  {caregiver.relationship ? ` · ${caregiver.relationship}` : ''}
+                  {caregiver.is_primary ? ' · primary' : ''}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+          {/* agent-5-resources */}
+          {(materialsCatalog || []).some((r) => r.quantity_on_hand > 0) && (
+            <Autocomplete
+              multiple
+              size="small"
+              options={materialsCatalog.filter((r) => r.quantity_on_hand > 0)}
+              value={materialsUsed}
+              onChange={(_e, value) => setMaterialsUsed(value)}
+              getOptionLabel={(option) => option.name || ''}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              disabled={checkingOut}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Materials used (optional)"
+                  placeholder="e.g. worksheet pack, pencil"
+                />
+              )}
+              sx={{ mt: 2.5, minWidth: { sm: 360 } }}
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button variant="text" onClick={() => setCheckoutTarget(null)} disabled={checkingOut}>

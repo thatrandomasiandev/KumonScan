@@ -25,6 +25,7 @@ import {
 import { getWeekdayCapacity, countExpectedForWeekday } from '../services/capacityService.js';
 import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
+import { assertCaregiverCanPickUp } from '../services/caregiverService.js'; // agent-2-pickup-auth
 import { getAuthoritativeTimeOr503 } from './shared.js';
 
 const router = Router();
@@ -136,7 +137,27 @@ router.post('/check-out', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    const session = await completeCheckOut(openSession, authoritativeTime.iso);
+    // agent-2-pickup-auth: optional pickup record. Validated BEFORE completing
+    // the check-out so a bad caregiver id never half-completes a session;
+    // omitting it keeps check-out behavior exactly as before.
+    let pickedUpBy = null;
+    if (req.body.picked_up_by != null && req.body.picked_up_by !== '') {
+      try {
+        const caregiver = await assertCaregiverCanPickUp(
+          req.center.id,
+          openSession.student_id,
+          req.body.picked_up_by
+        );
+        pickedUpBy = caregiver.id;
+      } catch (err) {
+        if (err?.status) {
+          return res.status(err.status).json({ error: err.message });
+        }
+        throw err;
+      }
+    }
+
+    const session = await completeCheckOut(openSession, authoritativeTime.iso, pickedUpBy);
     const allowance = session.allowance_minutes ?? allowanceForSubjects(session.subjects || 'both');
     const wasOvertime = (session.duration_minutes || 0) > allowance;
 

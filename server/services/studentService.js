@@ -47,13 +47,24 @@ export async function insertCheckIn(centerId, studentId, iso, subjects) {
   }
 }
 
-export async function completeCheckOut(openSession, iso) {
+export async function completeCheckOut(openSession, iso, pickedUpBy = null) {
   const duration = calculateDurationMinutes(openSession.check_in_time, iso);
-  await db
-    .prepare(
-      'UPDATE sessions SET check_out_time = ?, duration_minutes = ? WHERE id = ? AND center_id = ?'
-    )
-    .run(iso, duration, openSession.id, openSession.center_id);
+  // agent-2-pickup-auth: only reference picked_up_by when a pickup is recorded;
+  // the column is guaranteed to exist because caregiver validation ran first.
+  if (pickedUpBy != null) {
+    await db
+      .prepare(
+        `UPDATE sessions SET check_out_time = ?, duration_minutes = ?, picked_up_by = ?
+         WHERE id = ? AND center_id = ?`
+      )
+      .run(iso, duration, pickedUpBy, openSession.id, openSession.center_id);
+  } else {
+    await db
+      .prepare(
+        'UPDATE sessions SET check_out_time = ?, duration_minutes = ? WHERE id = ? AND center_id = ?'
+      )
+      .run(iso, duration, openSession.id, openSession.center_id);
+  }
 
   return await db
     .prepare('SELECT * FROM sessions WHERE id = ? AND center_id = ?')

@@ -42,6 +42,8 @@ import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import StaffPanel from '../components/StaffPanel';
 import DataPortabilityPanel from '../components/DataPortabilityPanel'; // agent-10-data-portability
+import ResourceInventory from '../components/ResourceInventory'; // agent-5-resources
+import CaregiverManager from '../components/CaregiverManager'; // agent-2-pickup-auth
 import { useSnackbar } from '../components/SnackbarProvider';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
@@ -912,6 +914,8 @@ export default function AdminPage() {
       {activeTab === 'staff' && (
         <>
           <StaffPanel timezone={present?.timezone} />
+          {/* agent-5-resources */}
+          <ResourceInventory />
           {/* agent-10-data-portability */}
           <DataPortabilityPanel />
         </>
@@ -1350,6 +1354,11 @@ export default function AdminPage() {
                   );
                 }}
               />
+
+              <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
+
+              {/* agent-2-pickup-auth */}
+              <CaregiverManager student={selectedStudent} />
 
               <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
 
