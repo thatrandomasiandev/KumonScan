@@ -43,10 +43,13 @@ import {
 } from '../sessionRules.js';
 import { v4 as uuidv4 } from 'uuid';
 import { importRosterFromContent } from '../rosterImport.js';
+import curriculumRoutes from './curriculum.routes.js';
 import { attendanceReportToPdf } from '../attendancePdf.js';
 import { closeStaleOpenSessions } from '../sessionHygiene.js';
 
 const router = Router();
+
+router.use(curriculumRoutes);
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 1000,
