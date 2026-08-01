@@ -13,7 +13,23 @@ if (!fs.existsSync(outputDir)) {
 }
 
 async function main() {
-  const students = await db.prepare('SELECT * FROM students WHERE active = 1').all();
+  // Default to the original center; pass a slug as argv[2] for another center.
+  const slug = process.argv[2] || null;
+  const students = slug
+    ? await db
+        .prepare(
+          `SELECT s.* FROM students s
+           JOIN centers c ON c.id = s.center_id
+           WHERE c.slug = ? AND s.active = 1`
+        )
+        .all(slug)
+    : await db
+        .prepare(
+          `SELECT * FROM students
+           WHERE center_id = (SELECT id FROM centers ORDER BY id ASC LIMIT 1)
+             AND active = 1`
+        )
+        .all();
 
   console.log(`Generating QR codes for ${students.length} students...\n`);
 

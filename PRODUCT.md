@@ -16,9 +16,13 @@ KumonScan replaces paper sign-in sheets. Staff check students in from the Desk r
 
 Session allowance is 30 minutes for one subject and 60 minutes for both. Open sessions on Desk and Admin show elapsed time; when elapsed exceeds the allowance, the student row turns red and shows overage minutes (for example +8 min). Checked-out students move to Completed today with total visit minutes.
 
-Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV or PDF (visits, total minutes, overtime count).
+Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV or PDF (visits, total minutes, overtime count) and charts average check-ins per weekday over the past 28 days against scheduled students.
 
-Admin accepts CRM roster upload (TSV/CSV) as the roster sync path: after Personal Orientation enrollments, staff export from the Kumon CRM and upload in Admin (name match updates; new names are created). The standard CRM export has no schedule-day column; Admin bulk schedule apply sets weekdays (MWF / TTh / Mon–Fri or custom) so Desk absences work. Staff can still edit subjects and days per student. Parent phone is optional contact for instructors; the app does not send automated SMS.
+Admin accepts CRM roster upload (TSV/CSV) as the roster sync path: after Personal Orientation enrollments, staff export from the Kumon CRM and upload in Admin (name match updates; new names are created). The standard CRM export has no schedule-day column; Admin bulk schedule apply sets weekdays (MWF / TTh / Mon–Fri or custom) so Desk absences work. Staff can still edit subjects and days per student.
+
+Check-in and check-out enqueue a parent SMS in a server-side `sms_queue` table when the student has a parent phone on file. A dedicated Android phone at the center runs the gateway app (`gateway-app/`), polls the queue every 15 seconds with a static `GATEWAY_API_KEY` bearer token, sends each message through the phone's own SMS plan, and acknowledges the result. Failed sends retry up to 3 attempts, then stay visible as failed. Queue inserts never block a scan; with no gateway configured, rows accumulate unsent and Admin's gateway status endpoint reports the backlog and the phone's last heartbeat. No third-party SMS API is involved.
+
+Admin's Staff & center tab manages staff records (role, hourly rate) and a time clock: clock-in and clock-out are stamped from timeapi.io like student sessions, with one open shift per staff member enforced by a partial unique index. The payroll report totals completed shifts per staff member over a date range (default: current month) and computes gross pay from hourly rate, exported as CSV. Weekday capacity limits (seats per day) are set in the same tab; Desk shows expected students and capacity for today and flags over-capacity.
 
 ## Brand Personality
 

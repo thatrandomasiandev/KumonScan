@@ -238,7 +238,7 @@ const theme = createTheme({
           lineHeight: '20px',
           letterSpacing: '0.1px',
           padding: '10px 24px',
-          minHeight: 40,
+          minHeight: 44,
           transition: `background-color ${motion.short2} ${motion.emphasizedDecelerate}`,
           '&:focus-visible': {
             outline: `3px solid ${alpha(md3Colors.primary, 0.4)}`,
@@ -399,6 +399,7 @@ const theme = createTheme({
           fontSize: '12px',
           fontWeight: 500,
           letterSpacing: '0.5px',
+          minHeight: 36,
         },
         filled: {
           backgroundColor: md3Colors.primaryContainer,
@@ -441,6 +442,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: shape.full,
+          minHeight: 48,
           '&:hover': {
             backgroundColor: alpha(md3Colors.onSurface, 0.08),
           },
@@ -451,6 +453,8 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: shape.full,
+          minWidth: 44,
+          minHeight: 44,
           '&:hover': {
             backgroundColor: alpha(md3Colors.onSurface, 0.08),
           },
@@ -458,6 +462,14 @@ const theme = createTheme({
             outline: `3px solid ${alpha(md3Colors.primary, 0.4)}`,
             outlineOffset: 2,
           },
+        },
+      },
+    },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          minHeight: 44,
+          px: 2,
         },
       },
     },

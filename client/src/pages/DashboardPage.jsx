@@ -134,6 +134,7 @@ function AttendanceReports() {
         >
           <ToggleButtonGroup
             exclusive
+            fullWidth
             value={period}
             onChange={(_e, next) => {
               if (next) setPeriod(next);
@@ -141,12 +142,14 @@ function AttendanceReports() {
             aria-label="Report period"
             sx={{
               gap: 1,
+              width: { xs: '100%', sm: 'auto' },
               '& .MuiToggleButtonGroup-grouped': {
                 border: `1px solid ${md3Colors.outlineVariant} !important`,
                 borderRadius: `${shape.medium}px !important`,
                 textTransform: 'none',
                 px: 2,
                 py: 1,
+                minHeight: 44,
                 color: md3Colors.onSurfaceVariant,
                 '&.Mui-selected': {
                   bgcolor: md3Colors.primaryContainer,
@@ -156,8 +159,12 @@ function AttendanceReports() {
               },
             }}
           >
-            <ToggleButton value="monthly">Monthly</ToggleButton>
-            <ToggleButton value="annual">Annual (12 mo)</ToggleButton>
+            <ToggleButton value="monthly" sx={{ flex: { xs: 1, sm: 'unset' } }}>
+              Monthly
+            </ToggleButton>
+            <ToggleButton value="annual" sx={{ flex: { xs: 1, sm: 'unset' } }}>
+              Annual (12 mo)
+            </ToggleButton>
           </ToggleButtonGroup>
 
           <TextField
@@ -170,7 +177,13 @@ function AttendanceReports() {
             sx={{ width: { xs: '100%', sm: 200 } }}
           />
 
-          <Button variant="contained" onClick={loadReport} disabled={loading || !month}>
+          <Button
+            variant="contained"
+            fullWidth={false}
+            onClick={loadReport}
+            disabled={loading || !month}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
             {loading ? 'Loading…' : 'Preview'}
           </Button>
           <Button
@@ -178,6 +191,7 @@ function AttendanceReports() {
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownload}
             disabled={downloading || downloadingPdf || !month}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloading ? 'Downloading…' : 'Download CSV'}
           </Button>
@@ -186,6 +200,7 @@ function AttendanceReports() {
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownloadPdf}
             disabled={downloading || downloadingPdf || !month}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloadingPdf ? 'Downloading…' : 'Download PDF'}
           </Button>
@@ -240,6 +255,63 @@ function AttendanceReports() {
           </Box>
         </Box>
       )}
+    </Paper>
+  );
+}
+
+function WeekdayUtilization() {
+  const [report, setReport] = useState(null);
+
+  useEffect(() => {
+    api.getUtilization().then(setReport).catch(() => setReport(null));
+  }, []);
+
+  if (!report) return null;
+
+  const chartData = report.weekdays.map((d) => ({
+    weekday: d.weekday,
+    'Avg check-ins': d.avg_checkins,
+    Scheduled: d.expected,
+    capacity: d.capacity,
+  }));
+
+  const hasAnyData = report.weekdays.some((d) => d.total_checkins > 0 || d.expected > 0);
+  if (!hasAnyData) return null;
+
+  const capacityDays = report.weekdays.filter((d) => d.capacity != null);
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mb: 3,
+        borderRadius: `${shape.extraLarge}px`,
+        bgcolor: md3Colors.surfaceBright,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
+        overflow: 'hidden',
+      }}
+    >
+      <Box sx={{ p: 3, pb: 2 }}>
+        <Typography variant="titleLarge" sx={{ mb: 0.5 }}>
+          Weekday utilization
+        </Typography>
+        <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, display: 'block', mb: 2 }}>
+          Average check-ins vs scheduled students, past {report.window_days} days
+          {capacityDays.length > 0
+            ? ` · capacity ${capacityDays.map((d) => `${d.weekday} ${d.capacity}`).join(', ')}`
+            : ' · set weekday capacity in Admin → Staff & center'}
+        </Typography>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={md3Colors.outlineVariant} />
+            <XAxis dataKey="weekday" tick={{ fontSize: 11, fill: md3Colors.onSurfaceVariant }} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: md3Colors.onSurfaceVariant }} />
+            <Tooltip />
+            <Bar dataKey="Avg check-ins" fill={md3Colors.primary} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Scheduled" fill={md3Colors.outlineVariant} radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Box>
     </Paper>
   );
 }
@@ -475,6 +547,8 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" subtitle={`Attendance overview · ${timezone}`} />
 
       <AttendanceReports />
+
+      <WeekdayUtilization />
 
       <Paper
         elevation={0}

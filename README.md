@@ -82,6 +82,24 @@ NODE_ENV=production
 
 Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `ALLOWED_ORIGINS` only for cross-origin admin clients.
 
+In production, admin routes return 503 if `ADMIN_PASSWORD` is unset (auth fails closed). JSON bodies are capped at 256kb except `/api/admin/roster-import` (8mb). `/api/scan` is rate-limited to 60 requests per minute per IP.
+
+## Parent SMS gateway
+
+Check-in and check-out enqueue a parent text in the `sms_queue` table (skipped when the student has no parent phone). A dedicated Android phone running `gateway-app/` sends the texts:
+
+1. Set `GATEWAY_API_KEY` (any long random string) in the server environment.
+2. Build and install `gateway-app/` on the phone (see `gateway-app/README.md`).
+3. Enter the server URL and the same key in the app, grant SMS permission, start the service.
+
+The phone polls `GET /api/gateway/pending` every 15 seconds (claims up to 20 messages atomically), sends via the phone's SMS plan, and reports each result to `POST /api/gateway/:id/ack`. Failures retry up to 3 attempts, then stay `failed`. `GET /api/admin/gateway-status` (staff-authenticated) reports the phone's last heartbeat and pending/failed counts. Without `GATEWAY_API_KEY`, gateway endpoints return 503 and queued rows accumulate unsent.
+
+## WhatsApp channel
+
+Each student has a `notify_channel` (`sms` default, or `whatsapp`) and an optional `parent_whatsapp` number, both editable in Admin. Students set to WhatsApp get check-in/check-out notifications through the Meta Cloud API (`graph.facebook.com/v19.0`) instead of the SMS queue; a missing `parent_whatsapp`, unset WhatsApp config, or a send failure never fails the check-in — the first two fall back to SMS with a logged warning, a send failure marks the message row `failed`. Inbound WhatsApp messages and delivery-status updates arrive at `/api/webhooks/whatsapp`, verified against `WHATSAPP_APP_SECRET` via `X-Hub-Signature-256`, and land in the same `messages` table as SMS (`channel = 'whatsapp'`) so staff see one thread per student.
+
+Setup requires four env vars (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`) plus two message templates named `checked_in` and `checked_out` (each with two body parameters: student name, local time) submitted for approval in Meta Business Manager. Until the templates are approved, sends fail soft with a template-not-found API error.
+
 ## Pages
 
 | Route        | Description                                                      |
@@ -89,7 +107,7 @@ Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `AL
 | `/`          | Full-screen QR scanner with live clock                           |
 | `/desk`      | Front-desk name check-in, subject selection, timers, check-out   |
 | `/dashboard` | Analytics table + session charts                                 |
-| `/admin`     | Student management + QR code generation                          |
+| `/admin`     | Student + staff management, QR codes, capacity, payroll          |
 
 ## API Endpoints
 
@@ -106,9 +124,24 @@ Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `AL
 | POST   | `/api/students`                | Create student + QR code value                   |
 | POST   | `/api/admin/roster-import`     | Admin CRM TSV/CSV roster upload                  |
 | POST   | `/api/admin/schedule-bulk`     | Bulk-set schedule days (missing or all active)   |
+| GET    | `/api/staff`                   | List staff with on-duty status                   |
+| POST   | `/api/staff`                   | Create staff member (role, hourly rate)          |
+| PATCH  | `/api/staff/:id`               | Update role, hourly rate, or active flag         |
+| POST   | `/api/staff/:id/clock-in`      | Start a shift (timeapi.io timestamp)             |
+| POST   | `/api/staff/:id/clock-out`     | End the open shift and record duration           |
+| GET    | `/api/reports/payroll`         | Per-staff hours + gross pay (JSON or CSV)        |
+| GET    | `/api/reports/utilization`     | Avg check-ins per weekday vs schedule + capacity |
+| GET    | `/api/admin/capacity`          | Weekday seat limits                              |
+| PUT    | `/api/admin/capacity`          | Set weekday seat limits                          |
 | PATCH  | `/api/students/:id/deactivate` | Deactivate a student                             |
 | GET    | `/api/dashboard`               | Dashboard summary + charts                       |
 | GET    | `/api/time`                    | Current server-sourced time                      |
+| GET    | `/api/gateway/pending`         | Gateway phone claims queued SMS (bearer key)     |
+| POST   | `/api/gateway/:id/ack`         | Gateway phone reports send result                |
+| POST   | `/api/gateway/heartbeat`       | Gateway phone liveness ping                      |
+| GET    | `/api/admin/gateway-status`    | Last heartbeat + pending/failed queue counts     |
+| GET    | `/api/webhooks/whatsapp`       | Meta webhook subscription handshake              |
+| POST   | `/api/webhooks/whatsapp`       | Inbound WhatsApp + delivery status (signed)      |
 | POST   | `/api/auth/login`              | Admin login (sets httpOnly cookie; rate-limited) |
 | POST   | `/api/auth/logout`             | Clears cookie and revokes the server-side session |
 | GET    | `/api/auth/status`             | Whether the current cookie is a valid admin session |

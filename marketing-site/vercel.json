@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "functions": {
+    "api/lead.js": {
+      "maxDuration": 10
+    }
+  }
+}

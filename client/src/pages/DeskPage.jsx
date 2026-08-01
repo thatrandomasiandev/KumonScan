@@ -20,6 +20,7 @@ import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { api, formatDuration, formatTime } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
@@ -32,7 +33,33 @@ const SUBJECT_OPTIONS = [
   { value: 'both', label: 'Both', allowance: 60 },
 ];
 
-function formatClock(date, timezone) {
+const toggleGroupSx = {
+  gap: 1,
+  '& .MuiToggleButtonGroup-grouped': {
+    border: `1px solid ${md3Colors.outlineVariant} !important`,
+    borderRadius: `${shape.medium}px !important`,
+    flex: 1,
+    py: 1.25,
+    textTransform: 'none',
+    color: md3Colors.onSurfaceVariant,
+    '&.Mui-selected': {
+      bgcolor: md3Colors.primaryContainer,
+      color: md3Colors.onPrimaryContainer,
+      borderColor: `${md3Colors.primary} !important`,
+      '&:hover': { bgcolor: md3Colors.primaryContainer },
+    },
+  },
+};
+
+function formatClock(date, timezone, { compact = false } = {}) {
+  if (compact) {
+    return date.toLocaleTimeString('en-US', {
+      timeZone: timezone || 'America/Los_Angeles',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
   return date.toLocaleString('en-US', {
     timeZone: timezone || 'America/Los_Angeles',
     weekday: 'short',
@@ -69,16 +96,19 @@ function LiveClock({ timezone }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 1,
-        px: 2,
+        px: { xs: 1.5, sm: 2 },
         py: 1,
         borderRadius: `${shape.medium}px`,
         bgcolor: md3Colors.surfaceVariant,
         fontFamily: '"Roboto Mono", Roboto, monospace',
+        maxWidth: '100%',
       }}
       aria-live="polite"
       aria-atomic="true"
     >
-      <AccessTimeOutlinedIcon sx={{ fontSize: 20, color: md3Colors.onSurfaceVariant }} />
+      <AccessTimeOutlinedIcon
+        sx={{ fontSize: 20, color: md3Colors.onSurfaceVariant, flexShrink: 0 }}
+      />
       <Typography
         variant="titleMedium"
         sx={{
@@ -86,9 +116,17 @@ function LiveClock({ timezone }) {
           fontFamily: 'inherit',
           fontVariantNumeric: 'tabular-nums',
           letterSpacing: 0,
+          fontSize: { xs: '16px', sm: '22px' },
+          lineHeight: { xs: '24px', sm: '28px' },
+          whiteSpace: 'nowrap',
         }}
       >
-        {formatClock(now, timezone)}
+        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+          {formatClock(now, timezone, { compact: true })}
+        </Box>
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          {formatClock(now, timezone)}
+        </Box>
       </Typography>
     </Box>
   );
@@ -105,23 +143,7 @@ function SubjectToggle({ value, onChange, disabled }) {
       }}
       disabled={disabled}
       aria-label="Subject for today's visit"
-      sx={{
-        gap: 1,
-        '& .MuiToggleButtonGroup-grouped': {
-          border: `1px solid ${md3Colors.outlineVariant} !important`,
-          borderRadius: `${shape.medium}px !important`,
-          flex: 1,
-          py: 1.25,
-          textTransform: 'none',
-          color: md3Colors.onSurfaceVariant,
-          '&.Mui-selected': {
-            bgcolor: md3Colors.primaryContainer,
-            color: md3Colors.onPrimaryContainer,
-            borderColor: `${md3Colors.primary} !important`,
-            '&:hover': { bgcolor: md3Colors.primaryContainer },
-          },
-        },
-      }}
+      sx={toggleGroupSx}
     >
       {SUBJECT_OPTIONS.map((opt) => (
         <ToggleButton key={opt.value} value={opt.value} aria-label={`${opt.label}, ${opt.allowance} minutes`}>
@@ -139,6 +161,34 @@ function SubjectToggle({ value, onChange, disabled }) {
   );
 }
 
+function ModeToggle({ value, onChange, disabled }) {
+  return (
+    <ToggleButtonGroup
+      exclusive
+      fullWidth
+      value={value}
+      onChange={(_e, next) => {
+        if (next) onChange(next);
+      }}
+      disabled={disabled}
+      aria-label="Session mode"
+      sx={toggleGroupSx}
+    >
+      <ToggleButton value="in_person" aria-label="In-person session">
+        <Typography variant="labelLarge" component="span">
+          In-person
+        </Typography>
+      </ToggleButton>
+      <ToggleButton value="remote" aria-label="Remote session over Zoom">
+        <VideocamOutlinedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+        <Typography variant="labelLarge" component="span">
+          Remote
+        </Typography>
+      </ToggleButton>
+    </ToggleButtonGroup>
+  );
+}
+
 function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
   const overtime = student.is_overtime;
 
@@ -148,7 +198,7 @@ function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
       type="button"
       onClick={() => onCheckOut(student)}
       disabled={checkingOut}
-      aria-label={`Check out ${student.name}${overtime ? `, overtime plus ${student.overtime_minutes} minutes` : ''}`}
+      aria-label={`Check out ${student.name}${student.is_remote ? ', remote session' : ''}${overtime ? `, overtime plus ${student.overtime_minutes} minutes` : ''}`}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -209,6 +259,23 @@ function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
         </Typography>
       </Box>
 
+      {student.is_remote && (
+        <Chip
+          size="small"
+          icon={<VideocamOutlinedIcon />}
+          label="Remote"
+          sx={{
+            height: 22,
+            flexShrink: 0,
+            fontWeight: 500,
+            // Neutral on purpose: color in this list is reserved for overtime.
+            bgcolor: 'rgba(26,27,34,0.08)',
+            color: 'inherit',
+            '& .MuiChip-icon': { color: 'inherit', fontSize: 15 },
+          }}
+        />
+      )}
+
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
         <Typography
           variant="titleSmall"
@@ -253,6 +320,8 @@ export default function DeskPage() {
   const [completed, setCompleted] = useState({ students: [], count: 0 });
   const [selected, setSelected] = useState(null);
   const [subjects, setSubjects] = useState('both');
+  const [mode, setMode] = useState('in_person');
+  const [remoteSessionIds, setRemoteSessionIds] = useState(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -276,12 +345,13 @@ export default function DeskPage() {
         elapsed_minutes: elapsed,
         is_overtime: isOvertime,
         overtime_minutes: isOvertime ? elapsed - allowance : 0,
+        is_remote: remoteSessionIds.has(s.session_id),
       };
     }).sort((a, b) => {
       if (a.is_overtime !== b.is_overtime) return a.is_overtime ? -1 : 1;
       return b.elapsed_minutes - a.elapsed_minutes;
     });
-  }, [present.students, tick, clockSkewMs]);
+  }, [present.students, tick, clockSkewMs, remoteSessionIds]);
 
   const overtimeCount = activeRoster.filter((s) => s.is_overtime).length;
 
@@ -295,14 +365,17 @@ export default function DeskPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [studentsData, presentData, completedData] = await Promise.all([
+      const [studentsData, presentData, completedData, remoteData] = await Promise.all([
         api.getStudents(),
         api.getPresent(),
         api.getCompletedToday(),
+        // Mode indicator only; never block the desk if this lookup fails.
+        api.getOpenRemoteSessions().catch(() => ({ session_ids: [] })),
       ]);
       setStudents(studentsData);
       setPresent(presentData);
       setCompleted(completedData);
+      setRemoteSessionIds(new Set(remoteData.session_ids || []));
       if (presentData?.clock_iso) {
         const serverMs = new Date(presentData.clock_iso).getTime();
         if (!Number.isNaN(serverMs)) {
@@ -342,9 +415,13 @@ export default function DeskPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const result = await api.checkIn(selected.id, subjects);
-      showSnackbar(`${result.student.name} checked in · ${SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label}`);
+      const result = await api.checkIn(selected.id, subjects, { mode });
+      const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
+      showSnackbar(
+        `${result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
+      );
       setSelected(null);
+      setMode('in_person');
       await loadData();
     } catch (err) {
       setError(err.message);
@@ -464,6 +541,14 @@ export default function DeskPage() {
         </Typography>
         <SubjectToggle value={subjects} onChange={setSubjects} disabled={submitting} />
 
+        <Typography
+          variant="labelLarge"
+          sx={{ display: 'block', mt: 2, mb: 1, color: md3Colors.onSurfaceVariant }}
+        >
+          Attending
+        </Typography>
+        <ModeToggle value={mode} onChange={setMode} disabled={submitting} />
+
         <Button
           type="submit"
           variant="contained"
@@ -514,6 +599,35 @@ export default function DeskPage() {
               Tap a name to check out
               {overtimeCount > 0 ? ` · ${overtimeCount} over time` : ''}
             </Typography>
+            {(present.expected_today != null || present.capacity_today != null) && (
+              <Typography
+                variant="bodySmall"
+                sx={{
+                  display: 'block',
+                  mt: 0.25,
+                  fontWeight:
+                    present.capacity_today != null && activeRoster.length > present.capacity_today
+                      ? 600
+                      : 400,
+                  color:
+                    present.capacity_today != null && activeRoster.length > present.capacity_today
+                      ? md3Colors.error
+                      : overtimeCount > 0
+                        ? md3Colors.onErrorContainer
+                        : md3Colors.onSurfaceVariant,
+                }}
+              >
+                {[
+                  present.expected_today != null ? `${present.expected_today} expected today` : null,
+                  present.capacity_today != null ? `capacity ${present.capacity_today}` : null,
+                  present.capacity_today != null && activeRoster.length > present.capacity_today
+                    ? 'over capacity'
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Typography>
+            )}
           </Box>
           <Box
             sx={{

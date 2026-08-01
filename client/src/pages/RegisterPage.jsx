@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { centerPath } from '../centerPath';
 import {
   Box,
   Button,
@@ -54,7 +55,7 @@ function CheckInResult({ result }) {
   );
 }
 
-function QRResult({ registration, onReset }) {
+function QRResult({ registration, onReset, centerSlug }) {
   const canvasRef = useRef(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [checkingIn, setCheckingIn] = useState(false);
@@ -224,7 +225,7 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
       </Box>
 
       <Box sx={{ borderTop: `1px solid ${md3Colors.outlineVariant}`, pt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Button component={Link} to="/" variant="outlined" fullWidth>
+        <Button component={Link} to={centerPath(centerSlug)} variant="outlined" fullWidth>
           Open Check-In Scanner
         </Button>
         <Button variant="text" onClick={onReset} sx={{ color: md3Colors.onSurfaceVariant }}>
@@ -236,6 +237,7 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
 }
 
 export default function RegisterPage() {
+  const { centerSlug } = useParams();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -272,7 +274,7 @@ export default function RegisterPage() {
         sx={{ bgcolor: getElevatedSurface(2), color: md3Colors.onSurface }}
       >
         <Toolbar sx={{ maxWidth: 480, mx: 'auto', width: '100%' }}>
-          <IconButton component={Link} to="/" edge="start" aria-label="Back to scan">
+          <IconButton component={Link} to={centerPath(centerSlug)} edge="start" aria-label="Back to scan">
             <ArrowBackOutlinedIcon />
           </IconButton>
           <Typography variant="titleLarge" sx={{ flex: 1, textAlign: 'center' }}>
@@ -357,12 +359,12 @@ export default function RegisterPage() {
               </Button>
             </Box>
 
-            <Button component={Link} to="/" variant="outlined" fullWidth sx={{ mt: 2 }}>
+            <Button component={Link} to={centerPath(centerSlug)} variant="outlined" fullWidth sx={{ mt: 2 }}>
               Go to Check-In Scanner
             </Button>
           </Paper>
         ) : (
-          <QRResult registration={registration} onReset={handleReset} />
+          <QRResult registration={registration} onReset={handleReset} centerSlug={centerSlug} />
         )}
       </Box>
     </Box>

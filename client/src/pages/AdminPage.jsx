@@ -23,12 +23,15 @@ import {
   InputAdornment,
   IconButton,
   CircularProgress,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
@@ -37,6 +40,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import { api, formatTime, formatDuration } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
+import StaffPanel from '../components/StaffPanel';
 import { useSnackbar } from '../components/SnackbarProvider';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
@@ -247,7 +251,7 @@ function QRDisplay({ student, onClose }) {
 
   useEffect(() => {
     QRCode.toDataURL(student.qr_code_value, {
-      width: 256,
+      width: 512,
       margin: 2,
       color: { dark: '#1B6EF3', light: '#ffffff' },
     }).then(setQrDataUrl);
@@ -270,14 +274,21 @@ function QRDisplay({ student, onClose }) {
         elevation={0}
         sx={{
           position: 'fixed',
-          top: '50%',
+          top: { xs: 'auto', sm: '50%' },
+          bottom: { xs: 0, sm: 'auto' },
           left: '50%',
-          transform: 'translate(-50%, -50%)',
+          transform: { xs: 'translateX(-50%)', sm: 'translate(-50%, -50%)' },
           zIndex: 1300,
           maxWidth: 400,
-          width: 'calc(100% - 32px)',
-          p: 3,
-          borderRadius: `${shape.extraLarge}px`,
+          width: { xs: '100%', sm: 'calc(100% - 32px)' },
+          maxHeight: { xs: '90dvh', sm: 'none' },
+          overflow: 'auto',
+          p: { xs: 2.5, sm: 3 },
+          pb: { xs: 'max(24px, env(safe-area-inset-bottom))', sm: 3 },
+          borderRadius: {
+            xs: `${shape.extraLarge}px ${shape.extraLarge}px 0 0`,
+            sm: `${shape.extraLarge}px`,
+          },
           bgcolor: getElevatedSurface(4),
           boxShadow: '0 4px 32px rgba(0,0,0,0.12)',
           textAlign: 'center',
@@ -293,18 +304,37 @@ function QRDisplay({ student, onClose }) {
           sx={{
             bgcolor: md3Colors.primaryContainer,
             borderRadius: `${shape.large}px`,
-            p: 2,
+            p: { xs: 1.5, sm: 2 },
             display: 'inline-block',
             mb: 3,
+            maxWidth: '100%',
           }}
         >
           {qrDataUrl ? (
-            <img src={qrDataUrl} alt={`QR code for ${student.name}`} />
+            <Box
+              component="img"
+              src={qrDataUrl}
+              alt={`QR code for ${student.name}`}
+              sx={{
+                width: '100%',
+                maxWidth: 256,
+                height: 'auto',
+                aspectRatio: '1 / 1',
+                display: 'block',
+              }}
+            />
           ) : (
-            <Box sx={{ width: 256, height: 256, bgcolor: md3Colors.surfaceVariant, borderRadius: `${shape.small}px` }} />
+            <Box
+              sx={{
+                width: 'min(256px, 70vw)',
+                aspectRatio: '1 / 1',
+                bgcolor: md3Colors.surfaceVariant,
+                borderRadius: `${shape.small}px`,
+              }}
+            />
           )}
         </Box>
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
           <Button variant="contained" fullWidth onClick={downloadQR} disabled={!qrDataUrl}>
             Download
           </Button>
@@ -322,19 +352,32 @@ function StudentScheduleEditor({ student, onSaved }) {
   const [enrolled, setEnrolled] = useState(student.enrolled_subjects || 'both');
   const [days, setDays] = useState(() => student.schedule_days || []);
   const [phone, setPhone] = useState(student.parent_phone || '');
+  const [notifyChannel, setNotifyChannel] = useState(student.notify_channel || 'sms');
+  const [whatsapp, setWhatsapp] = useState(student.parent_whatsapp || '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEnrolled(student.enrolled_subjects || 'both');
     setDays(student.schedule_days || []);
     setPhone(student.parent_phone || '');
-  }, [student.id, student.enrolled_subjects, student.schedule_days, student.parent_phone]);
+    setNotifyChannel(student.notify_channel || 'sms');
+    setWhatsapp(student.parent_whatsapp || '');
+  }, [
+    student.id,
+    student.enrolled_subjects,
+    student.schedule_days,
+    student.parent_phone,
+    student.notify_channel,
+    student.parent_whatsapp,
+  ]);
 
   const dirty =
     enrolled !== (student.enrolled_subjects || 'both') ||
     JSON.stringify([...(days || [])].sort()) !==
       JSON.stringify([...(student.schedule_days || [])].sort()) ||
-    phone.trim() !== (student.parent_phone || '');
+    phone.trim() !== (student.parent_phone || '') ||
+    notifyChannel !== (student.notify_channel || 'sms') ||
+    whatsapp.trim() !== (student.parent_whatsapp || '');
 
   function toggleDay(day) {
     setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
@@ -347,6 +390,8 @@ function StudentScheduleEditor({ student, onSaved }) {
         enrolled_subjects: enrolled,
         schedule_days: days,
         parent_phone: phone.trim() || null,
+        notify_channel: notifyChannel,
+        parent_whatsapp: whatsapp.trim() || null,
       });
       showSnackbar(`Saved for ${updated.name}`);
       onSaved?.(updated);
@@ -416,6 +461,7 @@ function StudentScheduleEditor({ student, onSaved }) {
               aria-pressed={selected}
               sx={{
                 minWidth: 52,
+                minHeight: 44,
                 fontWeight: 500,
                 bgcolor: selected ? md3Colors.primaryContainer : md3Colors.surfaceVariant,
                 color: selected ? md3Colors.onPrimaryContainer : md3Colors.onSurfaceVariant,
@@ -441,11 +487,62 @@ function StudentScheduleEditor({ student, onSaved }) {
             <PhoneOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
           ),
         }}
-        helperText="Optional parent contact for instructors. Not used for automated messages."
-        sx={{ mb: 3 }}
+        helperText="Used for SMS check-in/check-out notifications and staff messages."
+        sx={{ mb: 2.5 }}
       />
 
-      <Button variant="contained" onClick={handleSave} disabled={!dirty || saving}>
+      <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
+        Notification channel
+      </Typography>
+      <ToggleButtonGroup
+        exclusive
+        fullWidth
+        value={notifyChannel}
+        onChange={(_e, next) => {
+          if (next) setNotifyChannel(next);
+        }}
+        aria-label="Notification channel"
+        sx={{
+          mb: 2.5,
+          gap: 1,
+          '& .MuiToggleButtonGroup-grouped': {
+            border: `1px solid ${md3Colors.outlineVariant} !important`,
+            borderRadius: `${shape.medium}px !important`,
+            flex: 1,
+            textTransform: 'none',
+            py: 1,
+            color: md3Colors.onSurfaceVariant,
+            '&.Mui-selected': {
+              bgcolor: md3Colors.primaryContainer,
+              color: md3Colors.onPrimaryContainer,
+              borderColor: `${md3Colors.primary} !important`,
+            },
+          },
+        }}
+      >
+        <ToggleButton value="sms">SMS</ToggleButton>
+        <ToggleButton value="whatsapp">WhatsApp</ToggleButton>
+      </ToggleButtonGroup>
+
+      {notifyChannel === 'whatsapp' && (
+        <TextField
+          value={whatsapp}
+          onChange={(e) => setWhatsapp(e.target.value)}
+          placeholder="e.g. +1 213 555 0100"
+          fullWidth
+          size="small"
+          inputProps={{ inputMode: 'tel' }}
+          InputProps={{
+            startAdornment: (
+              <WhatsAppIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
+            ),
+          }}
+          helperText="WhatsApp number (may differ from the phone above). If empty, notifications fall back to SMS."
+          sx={{ mb: 2.5 }}
+        />
+      )}
+
+      <Button variant="contained" onClick={handleSave} disabled={!dirty || saving} sx={{ mt: 0.5 }}>
         {saving ? 'Saving…' : 'Save enrollment'}
       </Button>
     </Box>
@@ -499,9 +596,16 @@ function StudentSessionHistory({ student }) {
           width: '100%',
           border: 'none',
           background: 'none',
-          p: 0,
+          p: 1,
+          mx: -1,
+          minHeight: 44,
           cursor: 'pointer',
+          borderRadius: `${shape.small}px`,
           mb: expanded ? 1.5 : 0,
+          '&:focus-visible': {
+            outline: `3px solid ${md3Colors.primary}66`,
+            outlineOffset: 2,
+          },
         }}
         aria-expanded={expanded}
       >
@@ -638,6 +742,7 @@ export default function AdminPage() {
   const [scheduleBulkDays, setScheduleBulkDays] = useState(['Mon', 'Wed', 'Fri']);
   const [scheduleBulkScope, setScheduleBulkScope] = useState('missing');
   const [scheduleBulkBusy, setScheduleBulkBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState('students');
   const { showSnackbar } = useSnackbar();
 
   async function loadData() {
@@ -788,11 +893,28 @@ export default function AdminPage() {
 
   return (
     <Box sx={{ maxWidth: 1280, mx: 'auto', px: 2, py: 4, pb: { xs: 12, md: 4 }, position: 'relative' }}>
-      <PageHeader title="Admin" subtitle="Manage students, QR codes, and live attendance" />
+      <PageHeader title="Admin" subtitle="Manage students, staff, QR codes, and live attendance" />
 
-      {present && <CurrentlyHere present={present} timezone={present.timezone} />}
+      <Tabs
+        value={activeTab}
+        onChange={(_e, next) => setActiveTab(next)}
+        sx={{
+          mb: 2.5,
+          minHeight: 44,
+          '& .MuiTab-root': { minHeight: 44, textTransform: 'none', fontWeight: 500 },
+        }}
+      >
+        <Tab label="Students" value="students" />
+        <Tab label="Staff & center" value="staff" />
+      </Tabs>
 
-      {error && (
+      {activeTab === 'staff' && <StaffPanel timezone={present?.timezone} />}
+
+      {activeTab === 'students' && present && (
+        <CurrentlyHere present={present} timezone={present.timezone} />
+      )}
+
+      {activeTab === 'students' && error && (
         <Typography variant="bodyMedium" sx={{ color: md3Colors.error, mb: 2 }}>
           {error}
         </Typography>
@@ -800,7 +922,7 @@ export default function AdminPage() {
 
       <Box
         sx={{
-          display: 'flex',
+          display: activeTab === 'students' ? 'flex' : 'none',
           gap: 2,
           alignItems: 'stretch',
           minHeight: { md: 'min(70vh, 720px)' },
@@ -819,11 +941,22 @@ export default function AdminPage() {
             overflow: 'hidden',
             display: { xs: selectedStudent ? 'none' : 'flex', md: 'flex' },
             flexDirection: 'column',
-            minHeight: { xs: 420, md: 0 },
-            maxHeight: { xs: '70vh', md: 'none' },
+            minHeight: { xs: 360, md: 0 },
+            maxHeight: { xs: 'none', md: 'none' },
+            flex: { xs: 1, md: 'unset' },
           }}
         >
-          <Box sx={{ p: 2, borderBottom: `1px solid ${md3Colors.outlineVariant}`, flexShrink: 0 }}>
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: `1px solid ${md3Colors.outlineVariant}`,
+              flexShrink: 0,
+              position: { xs: 'sticky', md: 'static' },
+              top: 0,
+              zIndex: 1,
+              bgcolor: getElevatedSurface(1),
+            }}
+          >
             <Typography variant="titleMedium" sx={{ mb: 1.5 }}>
               Students
               <Typography component="span" variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, ml: 1 }}>
@@ -1128,8 +1261,15 @@ export default function AdminPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                 <Button
                   variant="text"
-                  sx={{ display: { md: 'none' }, minWidth: 0, p: 0.5 }}
+                  sx={{
+                    display: { md: 'none' },
+                    minWidth: 44,
+                    minHeight: 44,
+                    px: 1.5,
+                    flexShrink: 0,
+                  }}
                   onClick={() => setSelectedStudent(null)}
+                  aria-label="Back to student list"
                 >
                   ← Back
                 </Button>
@@ -1220,8 +1360,12 @@ export default function AdminPage() {
           setSelectedStudent(null);
         }}
         sx={{
+          display: activeTab === 'students' ? 'flex' : 'none',
           position: 'fixed',
-          bottom: { xs: 88, md: 24 },
+          bottom: {
+            xs: 'calc(88px + env(safe-area-inset-bottom))',
+            md: 24,
+          },
           right: 24,
           width: 56,
           height: 56,

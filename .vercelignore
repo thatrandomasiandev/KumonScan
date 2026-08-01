@@ -1,0 +1,16 @@
+.git
+node_modules
+client/node_modules
+server/node_modules
+client/dist
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+server/*.db
+server/data
+.vercel
+docs
+terminals

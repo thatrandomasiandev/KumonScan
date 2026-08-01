@@ -1,7 +1,26 @@
-const API_BASE = '/api';
+import { DEFAULT_CENTER_SLUG } from './centerPath';
+
+/**
+ * API base is rebuilt whenever the active center slug changes (see
+ * setCenterSlug). Every request goes through `/api/c/:centerSlug/...` so the
+ * server resolves tenancy from the path, not from a cookie or header.
+ */
+let activeCenterSlug = DEFAULT_CENTER_SLUG;
+
+export function setCenterSlug(slug) {
+  activeCenterSlug = slug || DEFAULT_CENTER_SLUG;
+}
+
+export function getCenterSlug() {
+  return activeCenterSlug;
+}
+
+function apiBase() {
+  return `/api/c/${activeCenterSlug}`;
+}
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${apiBase()}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
@@ -23,10 +42,10 @@ export const api = {
       body: JSON.stringify({ qr_code_value, force, subjects }),
     }),
 
-  checkIn: (student_id, subjects) =>
+  checkIn: (student_id, subjects, { mode = 'in_person' } = {}) =>
     request('/check-in', {
       method: 'POST',
-      body: JSON.stringify({ student_id, subjects }),
+      body: JSON.stringify({ student_id, subjects, mode }),
     }),
 
   checkOut: ({ student_id, session_id } = {}) =>
@@ -45,6 +64,8 @@ export const api = {
 
   getPresent: () => request('/present'),
 
+  getOpenRemoteSessions: () => request('/remote-attendance/open-sessions'),
+
   getCompletedToday: () => request('/completed-today'),
 
   getAbsent: (date) => {
@@ -61,7 +82,7 @@ export const api = {
   downloadAttendanceCsv: async ({ period = 'monthly', month } = {}) => {
     const params = new URLSearchParams({ period, format: 'csv' });
     if (month) params.set('month', month);
-    const response = await fetch(`${API_BASE}/reports/attendance?${params.toString()}`, {
+    const response = await fetch(`${apiBase()}/reports/attendance?${params.toString()}`, {
       credentials: 'include',
     });
     if (!response.ok) {
@@ -78,7 +99,7 @@ export const api = {
   downloadAttendancePdf: async ({ period = 'monthly', month } = {}) => {
     const params = new URLSearchParams({ period, format: 'pdf' });
     if (month) params.set('month', month);
-    const response = await fetch(`${API_BASE}/reports/attendance?${params.toString()}`, {
+    const response = await fetch(`${apiBase()}/reports/attendance?${params.toString()}`, {
       credentials: 'include',
     });
     if (!response.ok) {
@@ -121,6 +142,79 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ days, scope }),
     }),
+
+  getStaff: () => request('/staff'),
+
+  createStaff: ({ first_name, last_name, role, hourly_rate } = {}) =>
+    request('/staff', {
+      method: 'POST',
+      body: JSON.stringify({ first_name, last_name, role, hourly_rate }),
+    }),
+
+  updateStaff: (id, fields) =>
+    request(`/staff/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    }),
+
+  clockInStaff: (id) => request(`/staff/${id}/clock-in`, { method: 'POST' }),
+
+  clockOutStaff: (id) => request(`/staff/${id}/clock-out`, { method: 'POST' }),
+
+  getPayrollReport: ({ start, end } = {}) => {
+    const params = new URLSearchParams();
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    const qs = params.toString();
+    return request(`/reports/payroll${qs ? `?${qs}` : ''}`);
+  },
+
+  downloadPayrollCsv: async ({ start, end } = {}) => {
+    const params = new URLSearchParams({ format: 'csv' });
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    const response = await fetch(`${apiBase()}/reports/payroll?${params.toString()}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      'kumonscan-payroll.csv';
+    return { blob, filename };
+  },
+
+  getCapacity: () => request('/admin/capacity'),
+
+  updateCapacity: (capacity) =>
+    request('/admin/capacity', {
+      method: 'PUT',
+      body: JSON.stringify({ capacity }),
+    }),
+
+  getUtilization: () => request('/reports/utilization'),
+
+  // agent-7-insights
+  getInsightsSummary: ({ windowDays, atRiskThreshold } = {}) => {
+    const params = new URLSearchParams();
+    if (windowDays != null) params.set('window_days', windowDays);
+    if (atRiskThreshold != null) params.set('at_risk_threshold', atRiskThreshold);
+    const qs = params.toString();
+    return request(`/insights/summary${qs ? `?${qs}` : ''}`);
+  },
+
+  // agent-7-insights
+  getAtRiskStudents: ({ page, pageSize, threshold } = {}) => {
+    const params = new URLSearchParams();
+    if (page != null) params.set('page', page);
+    if (pageSize != null) params.set('page_size', pageSize);
+    if (threshold != null) params.set('threshold', threshold);
+    const qs = params.toString();
+    return request(`/insights/at-risk${qs ? `?${qs}` : ''}`);
+  },
 
   getDashboard: () => request('/dashboard'),
 

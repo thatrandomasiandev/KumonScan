@@ -5,14 +5,19 @@ import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import BrandMark from './BrandMark';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
+import { centerPath, pagePath } from '../centerPath';
 
 const railItems = [
   { path: '/', label: 'Scan', icon: QrCodeScannerOutlinedIcon },
   { path: '/desk', label: 'Desk', icon: DeskOutlinedIcon },
   { path: '/register', label: 'Register', icon: PersonAddOutlinedIcon },
   { path: '/dashboard', label: 'Dashboard', icon: BarChartOutlinedIcon },
+  { path: '/messages', label: 'Messages', icon: ForumOutlinedIcon }, // agent-1-messaging
+  { path: '/insights', label: 'Insights', icon: InsightsOutlinedIcon }, // agent-7-insights
   { path: '/admin', label: 'Admin', icon: SettingsOutlinedIcon },
 ];
 
@@ -73,9 +78,10 @@ function RailItem({ path, label, icon: Icon, active, onClick }) {
   );
 }
 
-export default function NavigationRail() {
+export default function NavigationRail({ centerSlug }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const currentPage = pagePath(location.pathname);
 
   return (
     <Box
@@ -107,8 +113,8 @@ export default function NavigationRail() {
             path={path}
             label={label}
             icon={icon}
-            active={location.pathname === path}
-            onClick={() => navigate(path)}
+            active={currentPage === path}
+            onClick={() => navigate(centerPath(centerSlug, path))}
           />
         ))}
       </Box>
