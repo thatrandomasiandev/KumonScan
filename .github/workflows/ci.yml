@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-tests:
+    name: Server tests (ephemeral Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Every run gets its own postgres:16 container. Nothing here touches the
+    # shared Neon test branch; ci-migrate.js hard-fails on *.neon.tech hosts.
+    #
+    # server/db.js uses the @neondatabase/serverless HTTP driver, which cannot
+    # speak to Postgres directly. The neon-proxy service translates the
+    # driver's HTTP SQL requests into wire-protocol Postgres queries.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kumonscan_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kumonscan_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      neon-proxy:
+        image: ghcr.io/timowilhelm/local-neon-http-proxy:main
+        env:
+          PG_CONNECTION_STRING: postgres://postgres:postgres@postgres:5432/kumonscan_ci
+        ports:
+          - 4444:4444
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/kumonscan_ci
+      NEON_FETCH_ENDPOINT: http://localhost:4444/sql
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      # npm ci on a clean Linux runner installs the linux-x64 native binaries
+      # from the lockfile. Never cache or reuse node_modules across platforms;
+      # that is what caused the rollup darwin/linux binary mismatch locally.
+      - name: Install dependencies
+        run: npm ci
+      - name: Migrate ephemeral database
+        run: node scripts/ci-migrate.js
+      - name: Run tests
+        run: npx vitest run --config vitest.ci.config.js
+
+  client-build:
+    name: Client build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+
+  marketing-site-build:
+    # marketing-site/ is not on main yet (in-flight on another branch). The
+    # detect step makes this job start building it automatically once it
+    # lands, and pass with a notice until then.
+    name: Marketing site build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect marketing-site
+        id: detect
+        run: |
+          if [ -f marketing-site/package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::marketing-site/ not present on this ref; skipping build."
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.detect.outputs.exists == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: marketing-site/package-lock.json
+      - name: Install dependencies
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: marketing-site
+        run: npm ci
+      - name: Build
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: marketing-site
+        run: npm run build
