@@ -45,8 +45,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { importRosterFromContent } from '../rosterImport.js';
 import { attendanceReportToPdf } from '../attendancePdf.js';
 import { closeStaleOpenSessions } from '../sessionHygiene.js';
+import parentAuthRoutes from './parentAuth.routes.js';
 
 const router = Router();
+
+router.use(parentAuthRoutes);
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 1000,
