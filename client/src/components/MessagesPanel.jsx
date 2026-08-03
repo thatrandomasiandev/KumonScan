@@ -17,7 +17,7 @@ import {
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import PageHeader from './PageHeader';
-import { formatTime } from '../api';
+import { formatTime, getCenterSlug } from '../api';
 import { useSnackbar } from './SnackbarProvider';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 
@@ -26,10 +26,13 @@ const THREAD_POLL_MS = 20_000;
 /**
  * Messaging endpoints are called directly here (instead of extending
  * src/api.js) so this workstream's only shared-file edits are the nav entry
- * and route registration.
+ * and route registration. The base path still has to be tenant-aware —
+ * every other endpoint goes through /api/c/:centerSlug/... (see api.js's
+ * apiBase()) — otherwise this panel silently operates on the default
+ * center's data once a second center exists.
  */
 async function request(path, options = {}) {
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`/api/c/${getCenterSlug()}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
