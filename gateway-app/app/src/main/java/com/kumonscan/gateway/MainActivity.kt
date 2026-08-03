@@ -37,9 +37,11 @@ class MainActivity : AppCompatActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        val smsGranted = results[Manifest.permission.SEND_SMS]
+        val sendGranted = results[Manifest.permission.SEND_SMS]
             ?: hasPermission(Manifest.permission.SEND_SMS)
-        if (smsGranted) {
+        val receiveGranted = results[Manifest.permission.RECEIVE_SMS]
+            ?: hasPermission(Manifest.permission.RECEIVE_SMS)
+        if (sendGranted && receiveGranted) {
             startGatewayService()
         } else {
             Toast.makeText(this, R.string.toast_sms_permission_required, Toast.LENGTH_LONG).show()
@@ -99,6 +101,9 @@ class MainActivity : AppCompatActivity() {
         val needed = mutableListOf<String>()
         if (!hasPermission(Manifest.permission.SEND_SMS)) {
             needed += Manifest.permission.SEND_SMS
+        }
+        if (!hasPermission(Manifest.permission.RECEIVE_SMS)) {
+            needed += Manifest.permission.RECEIVE_SMS
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
