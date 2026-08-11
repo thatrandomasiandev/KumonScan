@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -27,6 +28,23 @@
             android:name=".SmsGatewayService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+          Manifest-registered so it fires even if MainActivity has never been
+          opened this boot. android:permission restricts delivery to senders
+          holding BROADCAST_SMS (i.e. the platform telephony stack) -- this
+          receiver never handles a broadcast from another app. Requires the
+          runtime RECEIVE_SMS grant requested in MainActivity; without it the
+          system drops the broadcast before this receiver is invoked.
+        -->
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

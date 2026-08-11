@@ -44,6 +44,19 @@ class GatewayClient(baseUrl: String, private val apiKey: String) {
         request("POST", "/api/gateway/heartbeat", "{}")
     }
 
+    /**
+     * POST /api/gateway/inbound. Forwards one SMS the phone received so it
+     * lands in the staff messaging panel. `receivedAtIso` is the SMS
+     * timestamp (not the forward time) in ISO-8601 UTC.
+     */
+    fun inbound(fromPhone: String, body: String, receivedAtIso: String) {
+        val payload = JSONObject()
+            .put("from_phone", fromPhone)
+            .put("body", body)
+            .put("received_at", receivedAtIso)
+        request("POST", "/api/gateway/inbound", payload.toString())
+    }
+
     private fun request(method: String, path: String, body: String?): String {
         val connection = URL(baseUrl + path).openConnection() as HttpURLConnection
         try {
