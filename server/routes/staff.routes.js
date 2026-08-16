@@ -1,10 +1,13 @@
 import { Router } from 'express';
 import db, { isUniqueViolation, sqlNow } from '../db.js';
 import { calculateDurationMinutes } from '../timeService.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireRole } from '../middleware/auth.js';
 import { formatFullName, normalizeName, validateNameField } from '../utils/names.js';
 import { serializeStaff } from '../services/staffService.js';
+import { generateTempPassword, hashPassword } from '../utils/passwords.js';
 import { getAuthoritativeTimeOr503 } from './shared.js';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const router = Router();
 
@@ -27,7 +30,7 @@ router.get('/staff', requireAdmin, async (req, res) => {
   });
 });
 
-router.post('/staff', requireAdmin, async (req, res) => {
+router.post('/staff', requireAdmin, requireRole('manager'), async (req, res) => {
   const firstNameError = validateNameField(req.body?.first_name, 'First name');
   if (firstNameError) return res.status(400).json({ error: firstNameError });
 
@@ -69,7 +72,7 @@ router.post('/staff', requireAdmin, async (req, res) => {
   }
 });
 
-router.patch('/staff/:id', requireAdmin, async (req, res) => {
+router.patch('/staff/:id', requireAdmin, requireRole('manager'), async (req, res) => {
   const staff = await db
     .prepare('SELECT * FROM staff WHERE id = ? AND center_id = ?')
     .get(req.params.id, req.center.id);
@@ -85,6 +88,14 @@ router.patch('/staff/:id', requireAdmin, async (req, res) => {
     }
     updates.push('role = ?');
     values.push(role == null || role.trim() === '' ? null : role.trim());
+  }
+
+  if (req.body.permission_role !== undefined) {
+    if (req.body.permission_role !== 'manager' && req.body.permission_role !== 'front_desk') {
+      return res.status(400).json({ error: "permission_role must be 'manager' or 'front_desk'" });
+    }
+    updates.push('permission_role = ?');
+    values.push(req.body.permission_role);
   }
 
   if (req.body.hourly_rate !== undefined) {
@@ -119,6 +130,66 @@ router.patch('/staff/:id', requireAdmin, async (req, res) => {
     .prepare('SELECT * FROM staff WHERE id = ? AND center_id = ?')
     .get(staff.id, req.center.id);
   res.json(serializeStaff(updated));
+});
+
+/**
+ * Create (or replace) an individual login for a staff member: sets their
+ * email and a fresh one-time temporary password. The password is returned
+ * exactly once in this response — like the shared center password, it's
+ * relayed to the staff member directly by the manager, not emailed (this
+ * deployment has no outbound-email infrastructure). must_change_password
+ * forces a password-set screen on their first successful login.
+ */
+router.post('/staff/:id/login', requireAdmin, requireRole('manager'), async (req, res) => {
+  const staff = await db
+    .prepare('SELECT * FROM staff WHERE id = ? AND center_id = ?')
+    .get(req.params.id, req.center.id);
+  if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'A valid email is required' });
+  }
+
+  const tempPassword = generateTempPassword();
+
+  try {
+    await db
+      .prepare(
+        `UPDATE staff SET email = ?, password_hash = ?, must_change_password = 1
+         WHERE id = ? AND center_id = ?`
+      )
+      .run(email, hashPassword(tempPassword), staff.id, req.center.id);
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      return res.status(409).json({ error: 'Another staff member already uses that email' });
+    }
+    console.error('Create staff login error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+
+  res.status(201).json({ email, temp_password: tempPassword });
+});
+
+/** Manager-issued password reset — same one-time-temp-password pattern as creating a login. */
+router.post('/staff/:id/reset-password', requireAdmin, requireRole('manager'), async (req, res) => {
+  const staff = await db
+    .prepare('SELECT * FROM staff WHERE id = ? AND center_id = ?')
+    .get(req.params.id, req.center.id);
+  if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+  if (!staff.email) {
+    return res.status(400).json({ error: 'This staff member has no login to reset' });
+  }
+
+  const tempPassword = generateTempPassword();
+  await db
+    .prepare(
+      `UPDATE staff SET password_hash = ?, must_change_password = 1
+       WHERE id = ? AND center_id = ?`
+    )
+    .run(hashPassword(tempPassword), staff.id, req.center.id);
+
+  res.json({ email: staff.email, temp_password: tempPassword });
 });
 
 router.post('/staff/:id/clock-in', requireAdmin, async (req, res) => {

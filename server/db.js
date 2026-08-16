@@ -328,6 +328,28 @@ async function migrateTenancy() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_name_ci_center
       ON staff (center_id, LOWER(first_name), LOWER(last_name))
   `);
+
+  // Per-center sequential "student number" for kiosk name/number search.
+  // Idempotent: only rows still missing a number get one, continuing after
+  // that center's current max — safe to rerun on every boot.
+  await exec(`
+    WITH numbered AS (
+      SELECT
+        s1.id,
+        ROW_NUMBER() OVER (PARTITION BY s1.center_id ORDER BY s1.created_at ASC, s1.id ASC) AS rn,
+        (SELECT COALESCE(MAX(s2.student_number), 0) FROM students s2 WHERE s2.center_id = s1.center_id) AS base
+      FROM students s1
+      WHERE s1.student_number IS NULL
+    )
+    UPDATE students
+    SET student_number = numbered.base + numbered.rn
+    FROM numbered
+    WHERE students.id = numbered.id
+  `);
+  await exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_students_number_center
+      ON students (center_id, student_number) WHERE student_number IS NOT NULL
+  `);
 }
 
 async function migrateStudentsTable() {
@@ -347,7 +369,8 @@ async function migrateStudentsTable() {
         parent_phone TEXT,
         notify_channel TEXT NOT NULL DEFAULT 'sms',
         parent_whatsapp TEXT,
-        preferred_language TEXT NOT NULL DEFAULT 'en'
+        preferred_language TEXT NOT NULL DEFAULT 'en',
+        student_number INTEGER
       )
     `);
     return;
@@ -429,6 +452,9 @@ async function migrateStudentsTable() {
       `ALTER TABLE students ADD COLUMN IF NOT EXISTS preferred_language TEXT NOT NULL DEFAULT 'en'`
     );
   }
+  if (!cols.includes('student_number')) {
+    await exec(`ALTER TABLE students ADD COLUMN student_number INTEGER`);
+  }
 }
 
 async function migrateSessionsTable() {
@@ -445,6 +471,38 @@ async function migrateSessionsTable() {
       `ALTER TABLE sessions ADD COLUMN allowance_minutes INTEGER NOT NULL DEFAULT 60`
     );
   }
+  if (!columns.includes('edited_at')) {
+    await exec(`ALTER TABLE sessions ADD COLUMN edited_at TEXT`);
+  }
+}
+
+async function migrateStaffTable() {
+  if (!(await tableExists('staff'))) return;
+
+  const columns = await columnNames('staff');
+  if (!columns.includes('email')) {
+    await exec(`ALTER TABLE staff ADD COLUMN email TEXT`);
+  }
+  if (!columns.includes('password_hash')) {
+    await exec(`ALTER TABLE staff ADD COLUMN password_hash TEXT`);
+  }
+  if (!columns.includes('permission_role')) {
+    await exec(
+      `ALTER TABLE staff ADD COLUMN permission_role TEXT NOT NULL DEFAULT 'front_desk'`
+    );
+  }
+  if (!columns.includes('must_change_password')) {
+    await exec(
+      `ALTER TABLE staff ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`
+    );
+  }
+  if (!columns.includes('last_login_at')) {
+    await exec(`ALTER TABLE staff ADD COLUMN last_login_at TEXT`);
+  }
+  await exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_email_ci_center
+      ON staff (center_id, LOWER(email)) WHERE email IS NOT NULL
+  `);
 }
 
 async function dedupeOpenSessionsForUniqueIndex() {
@@ -522,6 +580,14 @@ export async function ensureDb() {
           created_at TEXT NOT NULL
         )
       `);
+      await migrateStaffTable();
+      // Session-correction accountability (server/services/studentService.js
+      // correctSessionTimes) — needs the staff table to exist first for the FK.
+      if (!(await columnNames('sessions')).includes('edited_by_staff_id')) {
+        await exec(
+          `ALTER TABLE sessions ADD COLUMN edited_by_staff_id INTEGER REFERENCES staff(id)`
+        );
+      }
       await exec(`
         CREATE TABLE IF NOT EXISTS staff_sessions (
           id SERIAL PRIMARY KEY,

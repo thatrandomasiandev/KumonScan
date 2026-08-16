@@ -22,6 +22,20 @@ export function hashPassword(password) {
   return `scrypt:${SCRYPT_N}:${SCRYPT_R}:${SCRYPT_P}:${salt.toString('hex')}:${key.toString('hex')}`;
 }
 
+// Excludes visually-ambiguous characters (0/O, 1/I/l) since a manager reads
+// this aloud or types it in front of the new staff member.
+const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+
+/** A one-time, manager-issued temporary password for a new/reset staff login. */
+export function generateTempPassword(length = 10) {
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += TEMP_PASSWORD_ALPHABET[bytes[i] % TEMP_PASSWORD_ALPHABET.length];
+  }
+  return out;
+}
+
 export function verifyPassword(password, stored) {
   if (typeof stored !== 'string' || typeof password !== 'string') return false;
   const parts = stored.split(':');

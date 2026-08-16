@@ -12,6 +12,8 @@ import {
   Divider,
   Paper,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
@@ -74,7 +76,11 @@ function StaffEditDialog({ staff, onClose, onSaved }) {
   const { showSnackbar } = useSnackbar();
   const [role, setRole] = useState(staff.role || '');
   const [rate, setRate] = useState(staff.hourly_rate != null ? String(staff.hourly_rate) : '');
+  const [permissionRole, setPermissionRole] = useState(staff.permission_role || 'front_desk');
+  const [email, setEmail] = useState(staff.email || '');
   const [saving, setSaving] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [tempPassword, setTempPassword] = useState(null);
 
   async function handleSave(fields) {
     setSaving(true);
@@ -86,6 +92,25 @@ function StaffEditDialog({ staff, onClose, onSaved }) {
       showSnackbar(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCreateOrResetLogin() {
+    if (!staff.has_login && !email.trim()) {
+      showSnackbar('Enter an email first');
+      return;
+    }
+    setLoginBusy(true);
+    try {
+      const result = staff.has_login
+        ? await api.resetStaffPassword(staff.id)
+        : await api.createStaffLogin(staff.id, email.trim());
+      setTempPassword(result.temp_password);
+      onSaved();
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setLoginBusy(false);
     }
   }
 
@@ -111,6 +136,66 @@ function StaffEditDialog({ staff, onClose, onSaved }) {
           inputProps={{ inputMode: 'decimal' }}
           helperText="Used for gross pay on the payroll report"
         />
+
+        <Divider />
+
+        <Typography variant="titleSmall">Permission level</Typography>
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={permissionRole}
+          onChange={(_e, value) => {
+            if (!value) return;
+            setPermissionRole(value);
+            handleSave({ permission_role: value });
+          }}
+        >
+          <ToggleButton value="front_desk">Front desk</ToggleButton>
+          <ToggleButton value="manager">Manager</ToggleButton>
+        </ToggleButtonGroup>
+
+        <Typography variant="titleSmall">Login</Typography>
+        {!staff.has_login && (
+          <TextField
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            fullWidth
+            size="small"
+          />
+        )}
+        {staff.has_login && (
+          <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+            {staff.email}
+            {staff.must_change_password ? ' · hasn’t set a permanent password yet' : ''}
+          </Typography>
+        )}
+        <Button
+          variant="outlined"
+          size="small"
+          disabled={loginBusy}
+          onClick={handleCreateOrResetLogin}
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          {loginBusy ? 'Working…' : staff.has_login ? 'Reset password' : 'Create login'}
+        </Button>
+        {tempPassword && (
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: `${shape.medium}px`,
+              bgcolor: md3Colors.tertiaryContainer,
+            }}
+          >
+            <Typography variant="bodySmall" sx={{ color: md3Colors.onTertiaryContainer }}>
+              Temporary password — share this with {staff.first_name} now, it won&rsquo;t be shown again:
+            </Typography>
+            <Typography variant="titleMedium" sx={{ color: md3Colors.onTertiaryContainer, fontFamily: 'monospace' }}>
+              {tempPassword}
+            </Typography>
+          </Box>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
         <Button
@@ -240,6 +325,23 @@ export default function StaffPanel({ timezone }) {
     setPayrollBusy(true);
     try {
       const { blob, filename } = await api.downloadPayrollCsv(payrollRange);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setPayrollBusy(false);
+    }
+  }
+
+  async function handlePayrollDownloadXlsx() {
+    setPayrollBusy(true);
+    try {
+      const { blob, filename } = await api.downloadPayrollXlsx(payrollRange);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -447,6 +549,14 @@ export default function StaffPanel({ timezone }) {
             disabled={payrollBusy}
           >
             Download CSV
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handlePayrollDownloadXlsx}
+            disabled={payrollBusy}
+          >
+            Download XLSX
           </Button>
         </Box>
 

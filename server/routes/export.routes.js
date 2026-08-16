@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { zipSync, strToU8 } from 'fflate';
 import db, { all } from '../db.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireRole } from '../middleware/auth.js';
 import { csvEscape } from '../services/reportService.js';
 
 /**
@@ -78,7 +78,7 @@ export function tableToCsv(columns, rows) {
   return lines.join('\n') + '\n';
 }
 
-router.get('/export/full', requireAdmin, exportLimiter, async (req, res) => {
+router.get('/export/full', requireAdmin, requireRole('manager'), exportLimiter, async (req, res) => {
   try {
     const tables = await existingExportTables();
     const generatedAt = new Date().toISOString();

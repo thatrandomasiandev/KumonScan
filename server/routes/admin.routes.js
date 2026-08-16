@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { normalizeScheduleDaysInput, parseScheduleDays } from '../timeService.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireRole } from '../middleware/auth.js';
 import { importRosterFromContent } from '../rosterImport.js';
+import { buildRosterTemplateCsv, buildRosterTemplateXlsx } from '../services/reportService.js';
 import {
   getWeekdayCapacity,
   CAPACITY_SETTING_KEY,
@@ -13,9 +14,11 @@ import { logger } from '../services/loggingService.js';
 
 const router = Router();
 
-router.post('/admin/roster-import', requireAdmin, async (req, res) => {
+router.post('/admin/roster-import', requireAdmin, requireRole('manager'), async (req, res) => {
   const filename = typeof req.body?.filename === 'string' ? req.body.filename : 'roster-upload';
   const content = typeof req.body?.content === 'string' ? req.body.content : '';
+  const format = req.body?.format === 'xlsx' ? 'xlsx' : 'text';
+  const mode = req.body?.mode === 'replace' ? 'replace' : 'merge';
 
   if (!content.trim()) {
     return res.status(400).json({ error: 'Roster file content is required' });
@@ -25,18 +28,26 @@ router.post('/admin/roster-import', requireAdmin, async (req, res) => {
     return res.status(413).json({ error: 'Roster file is too large (max 8MB)' });
   }
 
+  if (mode === 'replace' && req.body?.confirm_replace !== true) {
+    return res.status(400).json({
+      error: 'Replacing the entire roster requires confirm_replace: true',
+    });
+  }
+
   try {
-    const result = await importRosterFromContent(content, req.center.id);
+    const result = await importRosterFromContent(content, req.center.id, { mode, format });
     const { summary, totalProcessed, delimiterLabel, sourceColumns } = result;
     const anomalies = summary.skipped.length + summary.errored.length;
 
     res.json({
       ok: true,
       filename,
+      mode,
       delimiter: delimiterLabel,
       rows_processed: totalProcessed,
       created: summary.created,
       updated: summary.updated,
+      deactivated: summary.deactivated,
       skipped: summary.skipped.length,
       errored: summary.errored.length,
       skipped_rows: summary.skipped,
@@ -48,6 +59,23 @@ router.post('/admin/roster-import', requireAdmin, async (req, res) => {
     logger.warn({ err, route: 'POST /api/admin/roster-import', filename }, 'roster import rejected');
     res.status(400).json({ error: err.message || 'Roster import failed' });
   }
+});
+
+/** Sample roster files documenting the accepted import columns. */
+router.get('/admin/roster-template.csv', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="kumonscan-roster-template.csv"');
+  res.send(buildRosterTemplateCsv());
+});
+
+router.get('/admin/roster-template.xlsx', requireAdmin, async (req, res) => {
+  const buffer = await buildRosterTemplateXlsx();
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader('Content-Disposition', 'attachment; filename="kumonscan-roster-template.xlsx"');
+  res.send(buffer);
 });
 
 /**
@@ -100,7 +128,7 @@ router.get('/admin/capacity', requireAdmin, async (req, res) => {
   res.json({ capacity: await getWeekdayCapacity(req.center.id), weekdays: WEEKDAYS });
 });
 
-router.put('/admin/capacity', requireAdmin, async (req, res) => {
+router.put('/admin/capacity', requireAdmin, requireRole('manager'), async (req, res) => {
   const input = req.body?.capacity;
   if (!input || typeof input !== 'object') {
     return res.status(400).json({ error: 'capacity object is required' });

@@ -60,6 +60,8 @@ export const api = {
       body: JSON.stringify({ first_name, last_name, preferred_language }),
     }),
 
+  searchStudents: (q) => request(`/search?q=${encodeURIComponent(q)}`),
+
   getSystemStatus: () => request('/status'),
 
   getStudents: () => request('/students'),
@@ -115,7 +117,45 @@ export const api = {
     return { blob, filename };
   },
 
+  downloadAttendanceXlsx: async ({ period = 'monthly', month } = {}) => {
+    const params = new URLSearchParams({ period, format: 'xlsx' });
+    if (month) params.set('month', month);
+    const response = await fetch(`${apiBase()}/reports/attendance?${params.toString()}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      `kumonscan-attendance-${period}.xlsx`;
+    return { blob, filename };
+  },
+
+  downloadRosterTemplate: async (format = 'csv') => {
+    const response = await fetch(`${apiBase()}/admin/roster-template.${format}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      `kumonscan-roster-template.${format}`;
+    return { blob, filename };
+  },
+
   getStudentSessions: (id) => request(`/students/${id}/sessions`),
+
+  updateSession: (studentId, sessionId, { check_in_time, check_out_time }) =>
+    request(`/students/${studentId}/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ check_in_time, check_out_time }),
+    }),
 
   createStudent: (first_name, last_name, { enrolled_subjects } = {}) =>
     request('/students', {
@@ -133,10 +173,10 @@ export const api = {
     request(`/students/${id}/deactivate`, { method: 'PATCH' }),
 
 
-  importRoster: ({ filename, content }) =>
+  importRoster: ({ filename, content, format = 'text', mode = 'merge', confirm_replace = false }) =>
     request('/admin/roster-import', {
       method: 'POST',
-      body: JSON.stringify({ filename, content }),
+      body: JSON.stringify({ filename, content, format, mode, confirm_replace }),
     }),
 
   applyScheduleBulk: ({ days, scope = 'missing' }) =>
@@ -163,6 +203,14 @@ export const api = {
 
   clockOutStaff: (id) => request(`/staff/${id}/clock-out`, { method: 'POST' }),
 
+  createStaffLogin: (id, email) =>
+    request(`/staff/${id}/login`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetStaffPassword: (id) => request(`/staff/${id}/reset-password`, { method: 'POST' }),
+
   getPayrollReport: ({ start, end } = {}) => {
     const params = new URLSearchParams();
     if (start) params.set('start', start);
@@ -186,6 +234,24 @@ export const api = {
     const filename =
       response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
       'kumonscan-payroll.csv';
+    return { blob, filename };
+  },
+
+  downloadPayrollXlsx: async ({ start, end } = {}) => {
+    const params = new URLSearchParams({ format: 'xlsx' });
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    const response = await fetch(`${apiBase()}/reports/payroll?${params.toString()}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      'kumonscan-payroll.xlsx';
     return { blob, filename };
   },
 
@@ -226,6 +292,18 @@ export const api = {
 
   login: (password) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+
+  staffLogin: (email, password) =>
+    request('/auth/staff-login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  staffChangePassword: ({ current_password, new_password }) =>
+    request('/auth/staff-change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
 
   logout: () => request('/auth/logout', { method: 'POST' }),
 

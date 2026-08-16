@@ -1,7 +1,27 @@
-import db, { isOpenSessionUniqueViolation } from '../db.js';
+import db, { isOpenSessionUniqueViolation, withRealTransaction } from '../db.js';
 import { calculateDurationMinutes, isWithinPastDays, parseScheduleDays } from '../timeService.js';
 import { formatFullName } from '../utils/names.js';
 import { allowanceForSubjects, normalizeSubjects } from '../sessionRules.js';
+
+/**
+ * Assigns the next sequential student_number for a center and inserts the
+ * new student in the same transaction (holding a Postgres advisory lock for
+ * the duration) so two concurrent registrations can never be handed the
+ * same number. `insertFn(tx, studentNumber)` must run the INSERT and
+ * return the new student's id.
+ */
+export async function insertStudentWithNumber(centerId, insertFn) {
+  return withRealTransaction(async (tx) => {
+    await tx
+      .prepare(`SELECT pg_advisory_xact_lock(hashtext('student_number:' || ?::text))`)
+      .run(centerId);
+    const row = await tx
+      .prepare('SELECT COALESCE(MAX(student_number), 0) AS max FROM students WHERE center_id = ?')
+      .get(centerId);
+    const studentNumber = Number(row?.max || 0) + 1;
+    return insertFn(tx, studentNumber);
+  });
+}
 
 export function alreadyCheckedInError(openSession) {
   const error = new Error('Student is already checked in');
@@ -69,6 +89,87 @@ export async function completeCheckOut(openSession, iso, pickedUpBy = null) {
   return await db
     .prepare('SELECT * FROM sessions WHERE id = ? AND center_id = ?')
     .get(openSession.id, openSession.center_id);
+}
+
+export function sessionTimeCorrectionError(message) {
+  const error = new Error(message);
+  error.code = 'INVALID_SESSION_CORRECTION';
+  return error;
+}
+
+/**
+ * Fix a mistaken check-in/check-out timestamp on an existing session.
+ * Only ever mutates timestamps + the derived duration — never toggles a
+ * session between open/closed, which would collide with
+ * idx_one_open_session_per_student.
+ */
+export async function correctSessionTimes(
+  session,
+  { check_in_time, check_out_time },
+  nowIso,
+  editedByStaffId = null
+) {
+  const checkIn = new Date(check_in_time);
+  if (Number.isNaN(checkIn.getTime())) {
+    throw sessionTimeCorrectionError('check_in_time must be a valid date');
+  }
+
+  const hadOpenSession = session.check_out_time == null;
+  const checkOutProvided = check_out_time !== undefined && check_out_time !== null;
+
+  if (!checkOutProvided && !hadOpenSession) {
+    throw sessionTimeCorrectionError('check_out_time is required for a completed session');
+  }
+
+  let checkOut = null;
+  if (checkOutProvided) {
+    checkOut = new Date(check_out_time);
+    if (Number.isNaN(checkOut.getTime())) {
+      throw sessionTimeCorrectionError('check_out_time must be a valid date');
+    }
+    if (checkOut.getTime() <= checkIn.getTime()) {
+      throw sessionTimeCorrectionError('check_out_time must be after check_in_time');
+    }
+  }
+
+  const now = new Date(nowIso);
+  if (checkIn.getTime() > now.getTime()) {
+    throw sessionTimeCorrectionError('check_in_time cannot be in the future');
+  }
+  if (checkOut && checkOut.getTime() > now.getTime()) {
+    throw sessionTimeCorrectionError('check_out_time cannot be in the future');
+  }
+
+  const duration = checkOut ? calculateDurationMinutes(checkIn.toISOString(), checkOut.toISOString()) : null;
+
+  if (checkOut) {
+    await db
+      .prepare(
+        `UPDATE sessions
+         SET check_in_time = ?, check_out_time = ?, duration_minutes = ?, edited_at = ?, edited_by_staff_id = ?
+         WHERE id = ? AND center_id = ?`
+      )
+      .run(
+        checkIn.toISOString(),
+        checkOut.toISOString(),
+        duration,
+        nowIso,
+        editedByStaffId,
+        session.id,
+        session.center_id
+      );
+  } else {
+    await db
+      .prepare(
+        `UPDATE sessions SET check_in_time = ?, edited_at = ?, edited_by_staff_id = ?
+         WHERE id = ? AND center_id = ?`
+      )
+      .run(checkIn.toISOString(), nowIso, editedByStaffId, session.id, session.center_id);
+  }
+
+  return db
+    .prepare('SELECT * FROM sessions WHERE id = ? AND center_id = ?')
+    .get(session.id, session.center_id);
 }
 
 export function serializeStudent(student) {

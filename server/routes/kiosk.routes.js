@@ -10,6 +10,7 @@ import {
   insertCheckIn,
   completeCheckOut,
   resolveCheckInSubjects,
+  insertStudentWithNumber,
 } from '../services/studentService.js';
 import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
@@ -35,6 +36,58 @@ const scanLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many scans. Please wait a moment and try again.' },
+});
+
+// Generous: a debounced type-ahead search still fires several requests per
+// name typed, and this is a public, unauthenticated endpoint.
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many search requests. Please wait a moment and try again.' },
+});
+
+/**
+ * Public kiosk lookup: find yourself by name or student number instead of
+ * scanning a QR code. Deliberately returns only the fields already printed
+ * on a student's own QR code (no phone, notes, or other admin data) so this
+ * unauthenticated endpoint can never leak more than that.
+ */
+router.get('/search', searchLimiter, async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  if (!q) {
+    return res.json({ students: [] });
+  }
+
+  const like = `%${q}%`;
+  const asNumber = /^\d+$/.test(q) ? Number(q) : null;
+
+  const students = await db
+    .prepare(
+      `SELECT id, first_name, last_name, student_number, qr_code_value
+       FROM students
+       WHERE center_id = ? AND active = 1
+         AND (
+           first_name ILIKE ? OR last_name ILIKE ?
+           OR (first_name || ' ' || last_name) ILIKE ?
+           OR student_number = ?
+         )
+       ORDER BY first_name ASC, last_name ASC
+       LIMIT 8`
+    )
+    .all(req.center.id, like, like, like, asNumber);
+
+  res.json({
+    students: students.map((s) => ({
+      id: s.id,
+      first_name: s.first_name,
+      last_name: s.last_name,
+      name: formatFullName(s),
+      student_number: s.student_number,
+      qr_code_value: s.qr_code_value,
+    })),
+  });
 });
 
 router.post('/register', registerLimiter, async (req, res) => {
@@ -70,6 +123,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       last_name: existing.last_name,
       name: formatFullName(existing),
       qr_code_value: existing.qr_code_value,
+      student_number: existing.student_number,
       preferred_language: resolveLanguage(existing.preferred_language),
       is_new: false,
     });
@@ -82,23 +136,28 @@ router.post('/register', registerLimiter, async (req, res) => {
   const preferred_language = resolveLanguage(rawLanguage);
 
   try {
-    const result = await db
-      .prepare(
-        `INSERT INTO students (center_id, first_name, last_name, qr_code_value, registered_at, preferred_language)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        req.center.id,
-        first_name,
-        last_name,
-        qr_code_value,
-        sqlNow(),
-        preferred_language
-      );
+    const studentId = await insertStudentWithNumber(req.center.id, async (tx, studentNumber) => {
+      const result = await tx
+        .prepare(
+          `INSERT INTO students
+             (center_id, first_name, last_name, qr_code_value, registered_at, preferred_language, student_number)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          req.center.id,
+          first_name,
+          last_name,
+          qr_code_value,
+          sqlNow(),
+          preferred_language,
+          studentNumber
+        );
+      return result.lastInsertRowid;
+    });
 
     const student = await db
       .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
-      .get(result.lastInsertRowid, req.center.id);
+      .get(studentId, req.center.id);
 
     // agent-10: fire-and-forget on purpose — a slow subscriber must not delay registration.
     void emitWebhookEvent(req.center.id, 'student.registered', {
@@ -118,6 +177,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       last_name: student.last_name,
       name: formatFullName(student),
       qr_code_value: student.qr_code_value,
+      student_number: student.student_number,
       preferred_language: student.preferred_language,
       is_new: true,
     });
@@ -137,6 +197,7 @@ router.post('/register', registerLimiter, async (req, res) => {
           last_name: duplicate.last_name,
           name: formatFullName(duplicate),
           qr_code_value: duplicate.qr_code_value,
+          student_number: duplicate.student_number,
           preferred_language: resolveLanguage(duplicate.preferred_language),
           is_new: false,
         });

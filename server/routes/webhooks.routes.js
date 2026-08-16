@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireRole } from '../middleware/auth.js';
 import {
   WEBHOOK_EVENT_TYPES,
   createSubscription,
@@ -26,7 +26,7 @@ router.get('/webhooks', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/webhooks', requireAdmin, async (req, res) => {
+router.post('/webhooks', requireAdmin, requireRole('manager'), async (req, res) => {
   try {
     const subscription = await createSubscription(req.center.id, {
       url: req.body?.url,
@@ -47,7 +47,7 @@ router.post('/webhooks', requireAdmin, async (req, res) => {
   }
 });
 
-router.delete('/webhooks/:id', requireAdmin, async (req, res) => {
+router.delete('/webhooks/:id', requireAdmin, requireRole('manager'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ error: 'Subscription id must be a positive integer' });

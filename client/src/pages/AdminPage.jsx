@@ -26,6 +26,8 @@ import {
   Tabs,
   Tab,
   MenuItem,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
@@ -35,6 +37,7 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ClearOutlinedIcon from '@mui/icons-material/ClearOutlined';
@@ -59,6 +62,42 @@ const SUBJECT_OPTIONS = [
 
 function subjectLabel(value) {
   return SUBJECT_OPTIONS.find((o) => o.value === value)?.label || 'Both';
+}
+
+// Session correction inputs use the browser's local time (the front-desk
+// device is physically at the center, so local time is center time).
+function toDatetimeLocalValue(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+async function fileToBase64(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function elapsedMinutes(checkInTime, nowMs = Date.now()) {
@@ -589,6 +628,10 @@ function StudentSessionHistory({ student }) {
   const [sessions, setSessions] = useState(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [editingSession, setEditingSession] = useState(null);
+  const [editCheckIn, setEditCheckIn] = useState('');
+  const [editCheckOut, setEditCheckOut] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(async () => {
     if (sessions !== null) return;
@@ -608,6 +651,45 @@ function StudentSessionHistory({ student }) {
     const next = !expanded;
     setExpanded(next);
     if (next) load();
+  }
+
+  function openEdit(session) {
+    setEditingSession(session);
+    setEditCheckIn(toDatetimeLocalValue(session.check_in_time));
+    setEditCheckOut(toDatetimeLocalValue(session.check_out_time));
+  }
+
+  function closeEdit() {
+    setEditingSession(null);
+  }
+
+  async function saveEdit() {
+    const check_in_time = fromDatetimeLocalValue(editCheckIn);
+    if (!check_in_time) {
+      showSnackbar('Check-in time is required');
+      return;
+    }
+    const wasOpen = !editingSession.check_out_time;
+    const check_out_time = wasOpen ? undefined : fromDatetimeLocalValue(editCheckOut);
+    if (!wasOpen && !check_out_time) {
+      showSnackbar('Check-out time is required');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const updated = await api.updateSession(student.id, editingSession.id, {
+        check_in_time,
+        check_out_time,
+      });
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
+      showSnackbar('Session updated');
+      setEditingSession(null);
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   // Reset when student changes.
@@ -738,6 +820,14 @@ function StudentSessionHistory({ student }) {
                         }}
                       />
                     )}
+                    <IconButton
+                      size="small"
+                      aria-label="Correct this session's time"
+                      onClick={() => openEdit(session)}
+                      sx={{ color: md3Colors.onSurfaceVariant }}
+                    >
+                      <EditOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
                   </Box>
                 );
               })}
@@ -752,6 +842,44 @@ function StudentSessionHistory({ student }) {
           )}
         </Box>
       )}
+
+      <Dialog open={Boolean(editingSession)} onClose={closeEdit} fullWidth maxWidth="xs">
+        <DialogTitle>Correct session time</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <TextField
+              label="Check-in"
+              type="datetime-local"
+              value={editCheckIn}
+              onChange={(e) => setEditCheckIn(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            {editingSession && !editingSession.check_out_time ? (
+              <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                This session is still open — only the check-in time can be corrected here.
+              </Typography>
+            ) : (
+              <TextField
+                label="Check-out"
+                type="datetime-local"
+                value={editCheckOut}
+                onChange={(e) => setEditCheckOut(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+              />
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeEdit} disabled={savingEdit}>
+            Cancel
+          </Button>
+          <Button onClick={saveEdit} variant="contained" disabled={savingEdit}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -774,6 +902,8 @@ export default function AdminPage() {
   const [rosterImporting, setRosterImporting] = useState(false);
   const [rosterImportResult, setRosterImportResult] = useState(null);
   const [rosterImportError, setRosterImportError] = useState('');
+  const [rosterMode, setRosterMode] = useState('merge');
+  const [rosterReplaceConfirmed, setRosterReplaceConfirmed] = useState(false);
   const [scheduleBulkDays, setScheduleBulkDays] = useState(['Mon', 'Wed', 'Fri']);
   const [scheduleBulkScope, setScheduleBulkScope] = useState('missing');
   const [scheduleBulkBusy, setScheduleBulkBusy] = useState(false);
@@ -874,6 +1004,11 @@ export default function AdminPage() {
     event.target.value = '';
     if (!file) return;
 
+    if (rosterMode === 'replace' && !rosterReplaceConfirmed) {
+      setRosterImportError('Check the confirmation box before replacing the entire roster.');
+      return;
+    }
+
     const maxBytes = 8 * 1024 * 1024;
     if (file.size > maxBytes) {
       setRosterImportError('File is too large. Maximum size is 8MB.');
@@ -886,12 +1021,21 @@ export default function AdminPage() {
     setRosterImportResult(null);
 
     try {
-      const content = await file.text();
-      const result = await api.importRoster({ filename: file.name, content });
+      const isXlsx = /\.xlsx$/i.test(file.name);
+      const content = isXlsx ? await fileToBase64(file) : await file.text();
+      const result = await api.importRoster({
+        filename: file.name,
+        content,
+        format: isXlsx ? 'xlsx' : 'text',
+        mode: rosterMode,
+        confirm_replace: rosterMode === 'replace',
+      });
       setRosterImportResult(result);
+      const deactivatedNote = result.deactivated ? `, ${result.deactivated} deactivated` : '';
       showSnackbar(
-        `Roster imported: ${result.created} created, ${result.updated} updated, ${result.skipped + result.errored} anomalies`
+        `Roster imported: ${result.created} created, ${result.updated} updated${deactivatedNote}, ${result.skipped + result.errored} anomalies`
       );
+      setRosterReplaceConfirmed(false);
       await loadData();
     } catch (err) {
       const message = err.message || 'Roster import failed';
@@ -899,6 +1043,15 @@ export default function AdminPage() {
       showSnackbar(message);
     } finally {
       setRosterImporting(false);
+    }
+  }
+
+  async function handleDownloadRosterTemplate(format) {
+    try {
+      const { blob, filename } = await api.downloadRosterTemplate(format);
+      downloadBlob(blob, filename);
+    } catch (err) {
+      showSnackbar(err.message);
     }
   }
 
@@ -1135,19 +1288,68 @@ export default function AdminPage() {
                 roster sync path (CRM has no public API). Name match updates existing students; new names are
                 added. The standard CRM export has no schedule-day column — set days below after import.
               </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  Sample file:
+                </Typography>
+                <Button size="small" onClick={() => handleDownloadRosterTemplate('csv')}>
+                  Download CSV
+                </Button>
+                <Button size="small" onClick={() => handleDownloadRosterTemplate('xlsx')}>
+                  Download XLSX
+                </Button>
+              </Box>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={rosterMode}
+                onChange={(_e, value) => {
+                  if (!value) return;
+                  setRosterMode(value);
+                  setRosterReplaceConfirmed(false);
+                }}
+                sx={{ mb: rosterMode === 'replace' ? 1 : 1.5 }}
+              >
+                <ToggleButton value="merge">Merge with existing roster</ToggleButton>
+                <ToggleButton value="replace">Replace entire roster</ToggleButton>
+              </ToggleButtonGroup>
+              {rosterMode === 'replace' && (
+                <Box
+                  sx={{
+                    mb: 1.5,
+                    p: 1.5,
+                    borderRadius: `${shape.medium}px`,
+                    bgcolor: md3Colors.errorContainer,
+                  }}
+                >
+                  <Typography variant="bodySmall" sx={{ color: md3Colors.onErrorContainer, mb: 0.5 }}>
+                    Every active student not in this file will be deactivated. This cannot be undone.
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={rosterReplaceConfirmed}
+                        onChange={(e) => setRosterReplaceConfirmed(e.target.checked)}
+                        size="small"
+                      />
+                    }
+                    label="I understand — replace the entire roster"
+                  />
+                </Box>
+              )}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}>
                 <Button
                   variant="contained"
                   component="label"
                   startIcon={rosterImporting ? <CircularProgress size={16} color="inherit" /> : <UploadFileOutlinedIcon />}
-                  disabled={rosterImporting}
+                  disabled={rosterImporting || (rosterMode === 'replace' && !rosterReplaceConfirmed)}
                   sx={{ minWidth: 200 }}
                 >
                   {rosterImporting ? 'Importing…' : 'Upload roster file'}
                   <input
                     hidden
                     type="file"
-                    accept=".tsv,.csv,text/tab-separated-values,text/csv"
+                    accept=".tsv,.csv,.xlsx,text/tab-separated-values,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     onChange={handleRosterFileSelected}
                   />
                 </Button>
@@ -1170,7 +1372,7 @@ export default function AdminPage() {
                   }}
                 >
                   <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
-                    {`Detected ${rosterImportResult.delimiter}. Processed ${rosterImportResult.rows_processed} rows: ${rosterImportResult.created} created, ${rosterImportResult.updated} updated, ${rosterImportResult.skipped} skipped, ${rosterImportResult.errored} errored.`}
+                    {`Detected ${rosterImportResult.delimiter}. Processed ${rosterImportResult.rows_processed} rows: ${rosterImportResult.created} created, ${rosterImportResult.updated} updated${rosterImportResult.deactivated ? `, ${rosterImportResult.deactivated} deactivated` : ''}, ${rosterImportResult.skipped} skipped, ${rosterImportResult.errored} errored.`}
                   </Typography>
                 </Box>
               )}

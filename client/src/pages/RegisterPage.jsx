@@ -144,9 +144,14 @@ img{width:280px;height:280px}h1{margin:24px 0 8px;font-size:28px;font-weight:500
         textAlign: 'center',
       }}
     >
-      <Typography variant="titleLarge" sx={{ mb: 3 }}>
+      <Typography variant="titleLarge" sx={{ mb: registration.student_number ? 0.5 : 3 }}>
         {registration.first_name} {registration.last_name}
       </Typography>
+      {registration.student_number && (
+        <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant, mb: 3 }}>
+          {t('register.studentNumber', { number: registration.student_number })}
+        </Typography>
+      )}
 
       <Paper
         variant="outlined"

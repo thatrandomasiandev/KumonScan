@@ -11,6 +11,10 @@ export function serializeStaff(row, nowMs = Date.now()) {
     name: formatFullName(row),
     role: row.role || null,
     hourly_rate: row.hourly_rate ?? null,
+    email: row.email || null,
+    permission_role: row.permission_role || 'front_desk',
+    has_login: Boolean(row.password_hash),
+    must_change_password: Boolean(row.must_change_password),
     active: row.active,
     on_duty: onDuty,
     open_shift: onDuty

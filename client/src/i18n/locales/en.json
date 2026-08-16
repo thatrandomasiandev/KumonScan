@@ -27,6 +27,7 @@
     "print": "Print",
     "openScanner": "Open Check-In Scanner",
     "backNotYou": "← Back · Not you?",
-    "printQrCaption": "Personal Kumon check-in QR code"
+    "printQrCaption": "Personal Kumon check-in QR code",
+    "studentNumber": "Student #{{number}}"
   }
 }

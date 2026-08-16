@@ -99,7 +99,7 @@ export default function CaregiverManager({ student }) {
         await caregiversApi.update(student.id, editingId, payload);
         showSnackbar(`Caregiver updated for ${student.name}`);
       } else {
-        await caregiversApi.add(student.id, payload);
+        await caregiversApi.create(student.id, payload);
         showSnackbar(`Caregiver added for ${student.name}`);
       }
       setForm(EMPTY_FORM);

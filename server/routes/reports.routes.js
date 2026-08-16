@@ -10,13 +10,15 @@ import {
   monthBounds,
   parseScheduleDays,
 } from '../timeService.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireRole } from '../middleware/auth.js';
 import { attendanceReportToPdf } from '../attendancePdf.js';
 import { serializeStudent, getStudentStats } from '../services/studentService.js';
 import {
   buildAttendanceReport,
   attendanceReportToCsv,
+  attendanceReportToXlsx,
   payrollReportToCsv,
+  payrollReportToXlsx,
 } from '../services/reportService.js';
 import { captureError } from '../services/errorReportingService.js';
 import { buildPayrollReport } from '../services/staffService.js';
@@ -80,8 +82,7 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
   const period = req.query.period === 'annual' ? 'annual' : 'monthly';
   const now = getTodayInTimezone();
   const month = req.query.month || now.slice(0, 7);
-  const format =
-    req.query.format === 'csv' ? 'csv' : req.query.format === 'pdf' ? 'pdf' : 'json';
+  const format = ['csv', 'pdf', 'xlsx'].includes(req.query.format) ? req.query.format : 'json';
 
   let report;
   try {
@@ -95,6 +96,16 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(attendanceReportToCsv(report));
+  }
+
+  if (format === 'xlsx') {
+    const filename = `kumonscan-attendance-${period}-${month}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(await attendanceReportToXlsx(report));
   }
 
   if (format === 'pdf') {
@@ -122,7 +133,7 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
  * Query: ?start=YYYY-MM-DD&end=YYYY-MM-DD&format=json|csv
  * Defaults to the current calendar month in the center timezone.
  */
-router.get('/reports/payroll', requireAdmin, async (req, res) => {
+router.get('/reports/payroll', requireAdmin, requireRole('manager'), async (req, res) => {
   const defaults = monthBounds(getTodayInTimezone().slice(0, 7));
   const start = req.query.start || defaults.start;
   const end = req.query.end || defaults.end;
@@ -141,6 +152,16 @@ router.get('/reports/payroll', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(payrollReportToCsv(report));
+  }
+
+  if (req.query.format === 'xlsx') {
+    const filename = `kumonscan-payroll-${start}-to-${end}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(await payrollReportToXlsx(report));
   }
 
   res.json(report);

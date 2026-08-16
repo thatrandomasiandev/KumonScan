@@ -13,6 +13,8 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
+  Autocomplete,
+  CircularProgress,
 } from '@mui/material';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
 import QrCodeScannerOutlinedIcon from '@mui/icons-material/QrCodeScannerOutlined';
@@ -24,6 +26,7 @@ import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { api } from '../api';
 import BrandMark from '../components/BrandMark';
 import { md3Colors, motion, shape } from '../theme';
@@ -35,6 +38,28 @@ const ERROR_DISMISS_MS = 5000;
 const CAMERA_START_TIMEOUT_MS = 9000;
 
 const GRID = 4;
+
+/**
+ * html5-qrcode's stop() throws synchronously (not just a rejected promise)
+ * when called on a scanner that never reached the SCANNING state — e.g. the
+ * camera was still starting when a manual-code or search check-in
+ * succeeded. An uncaught throw here happens during a React effect cleanup,
+ * which unmounts the whole tree with no error boundary — so every stop()
+ * call site must go through this instead of calling it directly.
+ */
+async function safeStopScanner(scanner) {
+  if (!scanner) return;
+  try {
+    await scanner.stop();
+  } catch {
+    // Not running/paused — nothing to stop.
+  }
+  try {
+    await scanner.clear();
+  } catch {
+    // Already cleared, or never finished rendering.
+  }
+}
 
 function formatTopBarClock(timezone) {
   return new Date().toLocaleTimeString('en-US', {
@@ -527,7 +552,7 @@ function ErrorSheet({ onDismiss, onRegister }) {
   );
 }
 
-function ScanMenuDrawer({ open, onClose, navigate, currentPath, centerSlug }) {
+function ScanMenuDrawer({ open, onClose, navigate, currentPath, centerSlug, onLock }) {
   const items = [
     { label: 'Scan', path: '/', icon: QrCodeScannerOutlinedIcon },
     { label: 'Desk', path: '/desk', icon: DeskOutlinedIcon },
@@ -561,8 +586,102 @@ function ScanMenuDrawer({ open, onClose, navigate, currentPath, centerSlug }) {
             </ListItemButton>
           ))}
         </List>
+        <Divider />
+        <List>
+          <ListItemButton
+            onClick={() => {
+              onClose();
+              onLock();
+            }}
+            sx={{ minHeight: 48 }}
+          >
+            <ListItemIcon>
+              <LockOutlinedIcon sx={{ color: md3Colors.onSurfaceVariant }} />
+            </ListItemIcon>
+            <ListItemText primary="Lock kiosk" />
+          </ListItemButton>
+        </List>
       </Box>
     </Drawer>
+  );
+}
+
+const KIOSK_LOCK_STORAGE_KEY = 'kumonscan_kiosk_locked';
+
+function LockOverlay({ onUnlock }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!password.trim() || unlocking) return;
+    setUnlocking(true);
+    setError('');
+    try {
+      // Verify against the center's shared password, then immediately log
+      // back out — the kiosk should never be left holding a live admin
+      // session cookie on a public, shared device.
+      await api.login(password);
+      await api.logout().catch(() => {});
+      onUnlock();
+    } catch (err) {
+      setError(err.message || 'Incorrect password');
+    } finally {
+      setUnlocking(false);
+    }
+  }
+
+  return (
+    <Box
+      sx={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1400,
+        bgcolor: md3Colors.background,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        px: 3,
+      }}
+    >
+      <LockOutlinedIcon sx={{ fontSize: 40, color: md3Colors.onSurfaceVariant, mb: 2 }} />
+      <Typography variant="headlineMedium" sx={{ mb: 1, textAlign: 'center' }}>
+        Kiosk locked
+      </Typography>
+      <Typography
+        variant="bodyMedium"
+        sx={{ color: md3Colors.onSurfaceVariant, mb: 3, textAlign: 'center' }}
+      >
+        Enter the center password to unlock.
+      </Typography>
+      <Box
+        component="form"
+        onSubmit={handleSubmit}
+        sx={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+      >
+        <TextField
+          type="password"
+          label="Center password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoFocus
+          fullWidth
+          error={Boolean(error)}
+          helperText={error || ' '}
+        />
+        <Button
+          type="submit"
+          variant="contained"
+          disabled={!password.trim() || unlocking}
+          startIcon={unlocking ? <CircularProgress size={16} color="inherit" /> : undefined}
+          sx={{ minHeight: 48 }}
+        >
+          {unlocking ? 'Unlocking…' : 'Unlock'}
+        </Button>
+      </Box>
+    </Box>
   );
 }
 
@@ -579,10 +698,16 @@ export default function ScanPage() {
   const [manualCode, setManualCode] = useState('');
   const [timezone, setTimezone] = useState('America/Los_Angeles');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [locked, setLocked] = useState(
+    () => typeof window !== 'undefined' && sessionStorage.getItem(KIOSK_LOCK_STORAGE_KEY) === '1'
+  );
+  const [searchOptions, setSearchOptions] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const scannerRef = useRef(null);
   const scanSessionRef = useRef(0);
   const processingRef = useRef(false);
   const lastScanRef = useRef({ value: null, at: 0 });
+  const searchDebounceRef = useRef(null);
 
   const resumeScanning = useCallback(() => {
     setResult(null);
@@ -618,7 +743,7 @@ export default function ScanPage() {
       if (scannerRef.current) {
         const scanner = scannerRef.current;
         scannerRef.current = null;
-        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
+        void safeStopScanner(scanner);
       }
     } catch {
       setScanError(true);
@@ -628,7 +753,7 @@ export default function ScanPage() {
       if (scannerRef.current) {
         const scanner = scannerRef.current;
         scannerRef.current = null;
-        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
+        void safeStopScanner(scanner);
       }
     }
   }, []);
@@ -642,6 +767,49 @@ export default function ScanPage() {
       handleScan(code);
     },
     [manualCode, handleScan]
+  );
+
+  const handleLock = useCallback(() => {
+    sessionStorage.setItem(KIOSK_LOCK_STORAGE_KEY, '1');
+    setLocked(true);
+  }, []);
+
+  const handleUnlock = useCallback(() => {
+    sessionStorage.removeItem(KIOSK_LOCK_STORAGE_KEY);
+    setLocked(false);
+  }, []);
+
+  const handleSearchInputChange = useCallback((_e, value) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+
+    const q = value.trim();
+    if (!q) {
+      setSearchOptions([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const data = await api.searchStudents(q);
+        setSearchOptions(data.students || []);
+      } catch {
+        setSearchOptions([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSearchSelect = useCallback(
+    (_e, option) => {
+      if (!option || processingRef.current) return;
+      setScanError(null);
+      setSearchOptions([]);
+      handleScan(option.qr_code_value);
+    },
+    [handleScan]
   );
 
   useEffect(() => {
@@ -744,13 +912,19 @@ export default function ScanPage() {
         scannerRef.current = null;
       }
       if (scanner) {
-        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
+        void safeStopScanner(scanner);
       }
     };
   }, [scanning, handleScan]);
 
   useEffect(() => {
     api.getTime().then((t) => setTimezone(t.timezone)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
   }, []);
 
   return (
@@ -772,7 +946,9 @@ export default function ScanPage() {
         navigate={navigate}
         currentPath="/"
         centerSlug={centerSlug}
+        onLock={handleLock}
       />
+      {locked && <LockOverlay onUnlock={handleUnlock} />}
 
       <Box
         component="section"
@@ -893,6 +1069,37 @@ export default function ScanPage() {
             <Button type="submit" variant="outlined" disabled={!manualCode.trim() || processingRef.current}>
               Submit code
             </Button>
+          </Box>
+
+          <Box sx={{ width: '100%', maxWidth: 384 }}>
+            <Typography
+              variant="bodySmall"
+              sx={{ color: md3Colors.onSurfaceVariant, textAlign: 'center', mb: 1 }}
+            >
+              Or find yourself by name or student number
+            </Typography>
+            <Autocomplete
+              options={searchOptions}
+              loading={searchLoading}
+              filterOptions={(options) => options}
+              getOptionLabel={(option) =>
+                option.student_number
+                  ? `${option.name} · #${option.student_number}`
+                  : option.name || ''
+              }
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              onInputChange={handleSearchInputChange}
+              onChange={handleSearchSelect}
+              noOptionsText="No matching students"
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search first or last name"
+                  size="small"
+                  fullWidth
+                />
+              )}
+            />
           </Box>
         </Box>
       </Box>

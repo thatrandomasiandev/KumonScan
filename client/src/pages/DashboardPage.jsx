@@ -53,6 +53,7 @@ function AttendanceReports() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
 
   async function loadReport() {
     setLoading(true);
@@ -99,6 +100,24 @@ function AttendanceReports() {
       showSnackbar(err.message);
     } finally {
       setDownloadingPdf(false);
+    }
+  }
+
+  async function handleDownloadXlsx() {
+    setDownloadingXlsx(true);
+    try {
+      const { blob, filename } = await api.downloadAttendanceXlsx({ period, month });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      showSnackbar('XLSX downloaded');
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setDownloadingXlsx(false);
     }
   }
 
@@ -190,7 +209,7 @@ function AttendanceReports() {
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownload}
-            disabled={downloading || downloadingPdf || !month}
+            disabled={downloading || downloadingPdf || downloadingXlsx || !month}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloading ? 'Downloading…' : 'Download CSV'}
@@ -198,8 +217,17 @@ function AttendanceReports() {
           <Button
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
+            onClick={handleDownloadXlsx}
+            disabled={downloading || downloadingPdf || downloadingXlsx || !month}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
+            {downloadingXlsx ? 'Downloading…' : 'Download XLSX'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownloadPdf}
-            disabled={downloading || downloadingPdf || !month}
+            disabled={downloading || downloadingPdf || downloadingXlsx || !month}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloadingPdf ? 'Downloading…' : 'Download PDF'}

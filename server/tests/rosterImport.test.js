@@ -1,8 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import ExcelJS from 'exceljs';
 import db from '../db.js';
 import { importRosterFromContent } from '../rosterImport.js';
 import { parseScheduleDays } from '../timeService.js';
 import { defaultCenter, insertStudent, wipeCenterData } from './helpers.js';
+
+async function buildXlsxBase64(headers, rows) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Roster');
+  worksheet.addRow(headers);
+  for (const row of rows) worksheet.addRow(row);
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer).toString('base64');
+}
 
 describe('rosterImport', () => {
   let center;
@@ -113,5 +123,104 @@ describe('rosterImport', () => {
     } finally {
       await db.exec('ALTER TABLE students DROP CONSTRAINT IF EXISTS test_reject_evil');
     }
+  });
+
+  it('replace mode deactivates existing students absent from the new file', async () => {
+    const keep = await insertStudent(center.id, { first: 'Keep', last: 'Me' });
+    const drop = await insertStudent(center.id, { first: 'Drop', last: 'Me' });
+
+    const csv = ['First Name,Last Name', 'Keep,Me', 'New,Student'].join('\n');
+    const result = await importRosterFromContent(csv, center.id, { mode: 'replace' });
+
+    expect(result.summary.created).toBe(1);
+    expect(result.summary.updated).toBe(1);
+    expect(result.summary.deactivated).toBe(1);
+
+    const keepRow = await db.prepare('SELECT active FROM students WHERE id = ?').get(keep.id);
+    const dropRow = await db.prepare('SELECT active FROM students WHERE id = ?').get(drop.id);
+    expect(keepRow.active).toBe(1);
+    expect(dropRow.active).toBe(0);
+  });
+
+  it('replace mode is a soft delete — session history for a dropped student survives', async () => {
+    const dropped = await insertStudent(center.id, { first: 'History', last: 'Kept' });
+    await db
+      .prepare(
+        `INSERT INTO sessions (center_id, student_id, check_in_time, check_out_time, duration_minutes)
+         VALUES (?, ?, '2026-01-01T10:00:00.000Z', '2026-01-01T10:30:00.000Z', 30)`
+      )
+      .run(center.id, dropped.id);
+
+    const csv = ['First Name,Last Name', 'Someone,Else'].join('\n');
+    await importRosterFromContent(csv, center.id, { mode: 'replace' });
+
+    const session = await db
+      .prepare('SELECT * FROM sessions WHERE student_id = ?')
+      .get(dropped.id);
+    expect(session).toBeTruthy();
+    const student = await db.prepare('SELECT active FROM students WHERE id = ?').get(dropped.id);
+    expect(student.active).toBe(0);
+  });
+
+  it('replace mode refuses to wipe the roster when the file has no valid rows', async () => {
+    await insertStudent(center.id, { first: 'Still', last: 'Here' });
+    const csv = ['First Name,Last Name', ',Missing'].join('\n');
+
+    await expect(
+      importRosterFromContent(csv, center.id, { mode: 'replace' })
+    ).rejects.toThrow(/refusing to deactivate/i);
+
+    const count = (
+      await db.prepare('SELECT COUNT(*) AS count FROM students WHERE center_id = ? AND active = 1').get(center.id)
+    ).count;
+    expect(count).toBe(1);
+  });
+
+  it('merge mode never deactivates students missing from the file', async () => {
+    const untouched = await insertStudent(center.id, { first: 'Untouched', last: 'Student' });
+    const csv = ['First Name,Last Name', 'New,Student'].join('\n');
+
+    const result = await importRosterFromContent(csv, center.id, { mode: 'merge' });
+    expect(result.summary.deactivated).toBe(0);
+
+    const row = await db.prepare('SELECT active FROM students WHERE id = ?').get(untouched.id);
+    expect(row.active).toBe(1);
+  });
+
+  it('imports an XLSX roster with the same results as the equivalent CSV', async () => {
+    const base64 = await buildXlsxBase64(
+      ['First Name', 'Last Name', 'Subjects', 'Days'],
+      [
+        ['Xavier', 'Excel', 'math', 'Mon Wed'],
+        ['Yara', 'Sheets', 'reading', ''],
+      ]
+    );
+
+    const result = await importRosterFromContent(base64, center.id, { format: 'xlsx' });
+    expect(result.delimiterLabel).toBe('xlsx');
+    expect(result.summary.created).toBe(2);
+    expect(result.summary.errored).toEqual([]);
+    expect(result.summary.skipped).toEqual([]);
+
+    const xavier = await db
+      .prepare(`SELECT * FROM students WHERE center_id = ? AND first_name = 'Xavier'`)
+      .get(center.id);
+    expect(xavier.enrolled_subjects).toBe('math');
+    expect(parseScheduleDays(xavier.schedule_days)).toEqual(['Mon', 'Wed']);
+  });
+
+  it('XLSX import supports replace mode too', async () => {
+    const drop = await insertStudent(center.id, { first: 'Old', last: 'Roster' });
+    const base64 = await buildXlsxBase64(['First Name', 'Last Name'], [['Fresh', 'Roster']]);
+
+    const result = await importRosterFromContent(base64, center.id, {
+      format: 'xlsx',
+      mode: 'replace',
+    });
+    expect(result.summary.created).toBe(1);
+    expect(result.summary.deactivated).toBe(1);
+
+    const row = await db.prepare('SELECT active FROM students WHERE id = ?').get(drop.id);
+    expect(row.active).toBe(0);
   });
 });

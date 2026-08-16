@@ -1,4 +1,5 @@
 import { parse } from 'csv-parse/sync';
+import ExcelJS from 'exceljs';
 import { v4 as uuidv4 } from 'uuid';
 import { sqlNow, withRealTransaction } from './db.js';
 import { normalizeName, validateNameField } from './utils/names.js';
@@ -84,28 +85,111 @@ function rowLabel(i) {
   return `Row ${i + 2}`;
 }
 
-export async function importRosterFromContent(content, centerId) {
+/** Flattens an ExcelJS cell value (rich text, formula result, Date, ...) to a plain string. */
+function cellToString(value) {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object') {
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((t) => t.text).join('');
+    }
+    if ('result' in value) return cellToString(value.result);
+    if ('text' in value) return String(value.text);
+    return '';
+  }
+  return String(value).trim();
+}
+
+/**
+ * Parses the first worksheet of an XLSX workbook into the same shape
+ * csv-parse's `{ columns: true }` produces: an array of objects keyed by the
+ * raw header cell text, one per non-blank data row.
+ */
+async function parseXlsxRecords(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return [];
+
+  // ExcelJS's getSheetValues() is 1-indexed on both rows and columns
+  // (index 0 is always undefined) — mirrors the workbook's own numbering.
+  const sheetRows = worksheet.getSheetValues();
+  if (sheetRows.length < 2) return [];
+
+  const headerRow = sheetRows[1] || [];
+  const headers = headerRow.map((cell) => cellToString(cell));
+
+  const records = [];
+  for (let r = 2; r < sheetRows.length; r++) {
+    const row = sheetRows[r];
+    if (!row) continue;
+
+    const record = {};
+    let hasValue = false;
+    for (let col = 1; col < headers.length; col++) {
+      const header = headers[col];
+      if (!header) continue;
+      const value = cellToString(row[col]);
+      record[header] = value;
+      if (value !== '') hasValue = true;
+    }
+    if (hasValue) records.push(record);
+  }
+  return records;
+}
+
+/**
+ * @param {string} content raw CSV/TSV text, or base64-encoded XLSX bytes when format === 'xlsx'
+ * @param {number} centerId
+ * @param {{ mode?: 'merge' | 'replace', format?: 'text' | 'xlsx' }} [options]
+ *   mode 'replace' deactivates every existing active student not matched by
+ *   the uploaded file (soft delete — session history is never destroyed).
+ */
+export async function importRosterFromContent(
+  content,
+  centerId,
+  { mode = 'merge', format = 'text' } = {}
+) {
   if (!Number.isInteger(centerId) || centerId < 1) {
     throw new Error('importRosterFromContent requires a valid centerId');
   }
-  const detectedDelimiter = detectDelimiter(content);
+  if (mode !== 'merge' && mode !== 'replace') {
+    throw new Error("mode must be 'merge' or 'replace'");
+  }
 
-  const rawRecords = parse(content, {
-    delimiter: detectedDelimiter,
-    columns: true,
-    trim: true,
-    skip_empty_lines: true,
-    bom: true,
-  });
+  let detectedDelimiter = null;
+  let delimiterLabel = 'xlsx';
+  let rawRecords;
+
+  if (format === 'xlsx') {
+    let buffer;
+    try {
+      buffer = Buffer.from(content, 'base64');
+    } catch {
+      throw new Error('Invalid XLSX file content');
+    }
+    rawRecords = await parseXlsxRecords(buffer);
+  } else {
+    detectedDelimiter = detectDelimiter(content);
+    delimiterLabel = DELIMITER_NAMES[detectedDelimiter] || 'unknown';
+    rawRecords = parse(content, {
+      delimiter: detectedDelimiter,
+      columns: true,
+      trim: true,
+      skip_empty_lines: true,
+      bom: true,
+    });
+  }
 
   if (rawRecords.length === 0) {
     return {
       detectedDelimiter,
-      delimiterLabel: DELIMITER_NAMES[detectedDelimiter] || 'unknown',
+      delimiterLabel,
       totalProcessed: 0,
       summary: {
         created: 0,
         updated: 0,
+        deactivated: 0,
         skipped: [],
         errored: [],
       },
@@ -129,6 +213,7 @@ export async function importRosterFromContent(content, centerId) {
   const summary = {
     created: 0,
     updated: 0,
+    deactivated: 0,
     skipped: [],
     errored: [],
   };
@@ -206,6 +291,8 @@ export async function importRosterFromContent(content, centerId) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
+    const touchedIds = [];
+
     for (const row of candidates) {
       const existing = await findByName.get(centerId, row.first_name, row.last_name);
 
@@ -225,9 +312,10 @@ export async function importRosterFromContent(content, centerId) {
         params.push(row.parent_phone, existing.id, centerId);
         await updateStudent.run(...params);
         summary.updated++;
+        touchedIds.push(existing.id);
       } else {
         const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
-        await insertStudent.run(
+        const inserted = await insertStudent.run(
           centerId,
           row.first_name,
           row.last_name,
@@ -239,18 +327,35 @@ export async function importRosterFromContent(content, centerId) {
           sqlNow()
         );
         summary.created++;
+        touchedIds.push(inserted.lastInsertRowid);
       }
+    }
+
+    if (mode === 'replace') {
+      if (summary.created + summary.updated === 0) {
+        throw new Error(
+          'Replace mode requires at least one valid row in the uploaded file — refusing to deactivate the entire roster from an empty or invalid import.'
+        );
+      }
+      const deactivateResult = await tx
+        .prepare(
+          `UPDATE students SET active = 0
+           WHERE center_id = ? AND active = 1 AND id != ALL(?::int[])`
+        )
+        .run(centerId, touchedIds);
+      summary.deactivated = deactivateResult.changes;
     }
   }).catch((err) => {
     // Counts accumulated before the failure are meaningless after rollback.
     summary.created = 0;
     summary.updated = 0;
+    summary.deactivated = 0;
     throw err;
   });
 
   return {
     detectedDelimiter,
-    delimiterLabel: DELIMITER_NAMES[detectedDelimiter] || 'unknown',
+    delimiterLabel,
     totalProcessed: rawRecords.length,
     summary,
     sourceColumns: {

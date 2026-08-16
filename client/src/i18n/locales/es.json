@@ -27,6 +27,7 @@
     "print": "Imprimir",
     "openScanner": "Abrir el escáner de entrada",
     "backNotYou": "← Volver · ¿No eres tú?",
-    "printQrCaption": "Código QR personal de entrada a Kumon"
+    "printQrCaption": "Código QR personal de entrada a Kumon",
+    "studentNumber": "Estudiante n.º {{number}}"
   }
 }

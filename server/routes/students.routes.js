@@ -9,7 +9,7 @@ import {
   normalizeScheduleDaysInput,
   parseScheduleDays,
 } from '../timeService.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireRole, parseAdminSession } from '../middleware/auth.js';
 import {
   formatFullName,
   normalizeName,
@@ -17,9 +17,15 @@ import {
   validateNameField,
 } from '../utils/names.js';
 import { normalizeSubjects, SUBJECT_LABELS } from '../sessionRules.js';
-import { serializeStudent, getStudentStats } from '../services/studentService.js';
+import {
+  serializeStudent,
+  getStudentStats,
+  correctSessionTimes,
+  insertStudentWithNumber,
+} from '../services/studentService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { getSupportedLanguages } from '../services/i18nService.js';
+import { getAuthoritativeTimeOr503 } from './shared.js';
 
 const router = Router();
 
@@ -61,6 +67,49 @@ router.get('/students/:id/sessions', requireAdmin, async (req, res) => {
   });
 });
 
+/** Correct a mistaken check-in/check-out timestamp on an existing session. */
+router.patch('/students/:studentId/sessions/:sessionId', requireAdmin, async (req, res) => {
+  const student = await db
+    .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
+    .get(req.params.studentId, req.center.id);
+
+  if (!student) {
+    return res.status(404).json({ error: 'Student not found' });
+  }
+
+  const session = await db
+    .prepare('SELECT * FROM sessions WHERE id = ? AND student_id = ? AND center_id = ?')
+    .get(req.params.sessionId, student.id, req.center.id);
+
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  const { check_in_time, check_out_time } = req.body;
+  if (!check_in_time) {
+    return res.status(400).json({ error: 'check_in_time is required' });
+  }
+
+  const authoritativeTime = await getAuthoritativeTimeOr503(res);
+  if (!authoritativeTime) return;
+
+  try {
+    const editedByStaffId = parseAdminSession(req.cookies?.admin_session)?.staffId ?? null;
+    const updated = await correctSessionTimes(
+      session,
+      { check_in_time, check_out_time },
+      authoritativeTime.iso,
+      editedByStaffId
+    );
+    res.json(updated);
+  } catch (err) {
+    if (err.code === 'INVALID_SESSION_CORRECTION') {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+});
+
 router.post('/students', requireAdmin, async (req, res) => {
   const { name, first_name: rawFirstName, last_name: rawLastName, enrolled_subjects: rawEnrolled } =
     req.body;
@@ -90,16 +139,20 @@ router.post('/students', requireAdmin, async (req, res) => {
   const enrolled_subjects = normalizeSubjects(rawEnrolled) || 'both';
   const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
 
-  const result = await db
-    .prepare(
-      `INSERT INTO students (center_id, first_name, last_name, qr_code_value, enrolled_subjects, registered_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    )
-    .run(req.center.id, first_name, last_name, qr_code_value, enrolled_subjects, sqlNow());
+  const studentId = await insertStudentWithNumber(req.center.id, async (tx, studentNumber) => {
+    const result = await tx
+      .prepare(
+        `INSERT INTO students
+           (center_id, first_name, last_name, qr_code_value, enrolled_subjects, registered_at, student_number)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(req.center.id, first_name, last_name, qr_code_value, enrolled_subjects, sqlNow(), studentNumber);
+    return result.lastInsertRowid;
+  });
 
   const student = await db
     .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
-    .get(result.lastInsertRowid, req.center.id);
+    .get(studentId, req.center.id);
 
   // agent-10: fire-and-forget on purpose — a slow subscriber must not delay registration.
   void emitWebhookEvent(req.center.id, 'student.registered', {
@@ -204,7 +257,7 @@ router.patch('/students/:id', requireAdmin, async (req, res) => {
   res.json(serializeStudent(updated));
 });
 
-router.patch('/students/:id/deactivate', requireAdmin, async (req, res) => {
+router.patch('/students/:id/deactivate', requireAdmin, requireRole('manager'), async (req, res) => {
   const student = await db
     .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
     .get(req.params.id, req.center.id);

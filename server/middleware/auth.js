@@ -56,6 +56,10 @@ export function verifyCenterAdminPassword(center, password) {
  * Stateless signed cookie token, bound to one center. Format:
  * `expiresAt.centerId.hmac`, signed over `admin:centerId:expiresAt`, so a
  * session cookie for center A can never authenticate against center B.
+ * This is the shared center password's session — always manager-equivalent
+ * (it's the one credential every center has had since before per-staff
+ * logins existed, and doubles as a recovery path if a staff account is
+ * locked out).
  */
 export function createAdminSession(centerId) {
   const id = Number(centerId);
@@ -66,16 +70,68 @@ export function createAdminSession(centerId) {
   return `${expiresAt}.${id}.${sign(`admin:${id}:${expiresAt}`)}`;
 }
 
-/** Signature + expiry check only. Returns { centerId, expiresAt } or null. */
+/**
+ * Per-staff signed cookie token. Format: `expiresAt.centerId.staffId.role.hmac`,
+ * signed over `staff:centerId:staffId:role:expiresAt`. Issued by
+ * POST /auth/staff-login; carries the individual's identity and permission
+ * role so requireRole() can gate manager-only routes without a DB round trip.
+ */
+export function createStaffSession(centerId, staffId, role) {
+  const cId = Number(centerId);
+  const sId = Number(staffId);
+  if (!Number.isInteger(cId) || cId < 1) {
+    throw new Error('createStaffSession requires a valid center id');
+  }
+  if (!Number.isInteger(sId) || sId < 1) {
+    throw new Error('createStaffSession requires a valid staff id');
+  }
+  const normalizedRole = role === 'manager' ? 'manager' : 'front_desk';
+  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const sig = sign(`staff:${cId}:${sId}:${normalizedRole}:${expiresAt}`);
+  return `${expiresAt}.${cId}.${sId}.${normalizedRole}.${sig}`;
+}
+
+/**
+ * Signature + expiry check only, for either token shape. Returns
+ * { centerId, expiresAt, staffId, role } — staffId/role are null for a
+ * shared-center-password session (the legacy 3-segment format).
+ */
 export function parseAdminSession(token) {
   if (!token || typeof token !== 'string') return null;
-  const [expiresAtRaw, centerIdRaw, sig] = token.split('.');
-  const expiresAt = Number(expiresAtRaw);
-  const centerId = Number(centerIdRaw);
-  if (!Number.isFinite(expiresAt) || !Number.isInteger(centerId) || !sig) return null;
-  if (Date.now() > expiresAt) return null;
-  const expected = sign(`admin:${centerId}:${expiresAt}`);
-  return timingSafeEqualString(sig, expected) ? { centerId, expiresAt } : null;
+  const parts = token.split('.');
+
+  if (parts.length === 3) {
+    const [expiresAtRaw, centerIdRaw, sig] = parts;
+    const expiresAt = Number(expiresAtRaw);
+    const centerId = Number(centerIdRaw);
+    if (!Number.isFinite(expiresAt) || !Number.isInteger(centerId) || !sig) return null;
+    if (Date.now() > expiresAt) return null;
+    const expected = sign(`admin:${centerId}:${expiresAt}`);
+    return timingSafeEqualString(sig, expected)
+      ? { centerId, expiresAt, staffId: null, role: null }
+      : null;
+  }
+
+  if (parts.length === 5) {
+    const [expiresAtRaw, centerIdRaw, staffIdRaw, role, sig] = parts;
+    const expiresAt = Number(expiresAtRaw);
+    const centerId = Number(centerIdRaw);
+    const staffId = Number(staffIdRaw);
+    if (
+      !Number.isFinite(expiresAt) ||
+      !Number.isInteger(centerId) ||
+      !Number.isInteger(staffId) ||
+      (role !== 'manager' && role !== 'front_desk') ||
+      !sig
+    ) {
+      return null;
+    }
+    if (Date.now() > expiresAt) return null;
+    const expected = sign(`staff:${centerId}:${staffId}:${role}:${expiresAt}`);
+    return timingSafeEqualString(sig, expected) ? { centerId, expiresAt, staffId, role } : null;
+  }
+
+  return null;
 }
 
 /**
@@ -152,6 +208,47 @@ export async function requireAdmin(req, res, next) {
   }
 
   return res.status(401).json({ error: 'Admin authentication required' });
+}
+
+/**
+ * Gates a route to managers only. Must run after requireAdmin on the same
+ * route (it re-derives its own pass/fail rather than trusting req to carry
+ * state, so route wiring order matters but nothing is shared between them).
+ * A shared-center-password session is always manager-equivalent; a staff
+ * session must carry role === 'manager'.
+ */
+export function requireRole(requiredRole) {
+  return async (req, res, next) => {
+    const center = req.center;
+    if (!center) {
+      console.error(`requireRole reached without req.center on ${req.method} ${req.originalUrl}`);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+
+    if (!isCenterAdminConfigured(center) && process.env.NODE_ENV !== 'production') {
+      return next();
+    }
+
+    const token = req.cookies?.admin_session;
+    let parsed;
+    try {
+      if (!(await isAdminSessionActiveForCenter(token, center.id))) {
+        return res.status(401).json({ error: 'Admin authentication required' });
+      }
+      parsed = parseAdminSession(token);
+    } catch (err) {
+      console.error('Admin session check failed:', err?.message || err);
+      return res.status(503).json({ error: 'Authentication check failed' });
+    }
+
+    if (!parsed?.staffId || parsed.role === 'manager') {
+      return next();
+    }
+    if (parsed.role === requiredRole) {
+      return next();
+    }
+    return res.status(403).json({ error: `This action requires the ${requiredRole} role` });
+  };
 }
 
 /**

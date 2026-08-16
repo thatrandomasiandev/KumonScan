@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import db from '../db.js';
 import {
   getCenterTimezone,
@@ -7,6 +8,15 @@ import {
 } from '../timeService.js';
 import { formatFullName } from '../utils/names.js';
 import { allowanceForSubjects } from '../sessionRules.js';
+
+/** Builds an XLSX workbook (single sheet) and returns it as a Buffer. */
+async function rowsToXlsxBuffer(columns, rows) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Sheet1');
+  worksheet.columns = columns.map((c) => ({ header: c.header, key: c.key, width: c.width || 18 }));
+  for (const row of rows) worksheet.addRow(row);
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
 
 export function csvEscape(value) {
   const str = String(value ?? '');
@@ -127,4 +137,109 @@ export function payrollReportToCsv(report) {
     );
   }
   return lines.join('\n') + '\n';
+}
+
+const ATTENDANCE_XLSX_COLUMNS = [
+  { header: 'Student ID', key: 'id' },
+  { header: 'First Name', key: 'first_name' },
+  { header: 'Last Name', key: 'last_name' },
+  { header: 'Name', key: 'name' },
+  { header: 'Active', key: 'active' },
+  { header: 'Visits', key: 'visits' },
+  { header: 'Total Minutes', key: 'total_minutes' },
+  { header: 'Overtime Count', key: 'overtime_count' },
+];
+
+export function attendanceReportToXlsx(report) {
+  return rowsToXlsxBuffer(
+    ATTENDANCE_XLSX_COLUMNS,
+    report.students.map((row) => ({
+      id: row.id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      name: row.name,
+      active: row.active ? 1 : 0,
+      visits: row.visits,
+      total_minutes: row.total_minutes,
+      overtime_count: row.overtime_count,
+    }))
+  );
+}
+
+const PAYROLL_XLSX_COLUMNS = [
+  { header: 'Staff ID', key: 'id' },
+  { header: 'Name', key: 'name' },
+  { header: 'Role', key: 'role' },
+  { header: 'Shifts', key: 'shifts' },
+  { header: 'Total Hours', key: 'total_hours' },
+  { header: 'Hourly Rate', key: 'hourly_rate' },
+  { header: 'Gross Pay', key: 'gross_pay' },
+];
+
+export function payrollReportToXlsx(report) {
+  return rowsToXlsxBuffer(
+    PAYROLL_XLSX_COLUMNS,
+    report.staff.map((row) => ({
+      id: row.id,
+      name: row.name,
+      role: row.role || '',
+      shifts: row.shifts,
+      total_hours: row.total_hours,
+      hourly_rate: row.hourly_rate ?? '',
+      gross_pay: row.gross_pay ?? '',
+    }))
+  );
+}
+
+/**
+ * Documents the columns importRosterFromContent (server/rosterImport.js)
+ * actually accepts: first/last name required, subjects/days/active/phone
+ * optional. Used for the "download sample roster" links in Admin.
+ */
+const ROSTER_TEMPLATE_ROWS = [
+  {
+    'first name': 'Alex',
+    'last name': 'Kim',
+    subjects: 'both',
+    days: 'Mon Wed Fri',
+    active: 'true',
+    phone: '+15551234567',
+  },
+  {
+    'first name': 'Jordan',
+    'last name': 'Lee',
+    subjects: 'math',
+    days: 'Tue Thu',
+    active: 'true',
+    phone: '',
+  },
+  {
+    'first name': 'Sam',
+    'last name': 'Patel',
+    subjects: 'reading',
+    days: '',
+    active: 'true',
+    phone: '',
+  },
+];
+
+export function buildRosterTemplateCsv() {
+  const header = ['first name', 'last name', 'subjects', 'days', 'active', 'phone'];
+  const lines = [header.join(',')];
+  for (const row of ROSTER_TEMPLATE_ROWS) {
+    lines.push(header.map((key) => csvEscape(row[key])).join(','));
+  }
+  return lines.join('\n') + '\n';
+}
+
+export function buildRosterTemplateXlsx() {
+  const columns = [
+    { header: 'First Name', key: 'first name' },
+    { header: 'Last Name', key: 'last name' },
+    { header: 'Subjects', key: 'subjects' },
+    { header: 'Days', key: 'days' },
+    { header: 'Active', key: 'active' },
+    { header: 'Phone', key: 'phone' },
+  ];
+  return rowsToXlsxBuffer(columns, ROSTER_TEMPLATE_ROWS);
 }
