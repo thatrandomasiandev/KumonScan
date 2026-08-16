@@ -1,4 +1,5 @@
 import db, { sqlNow } from '../db.js';
+import { attemptImmediateSend } from './twilioService.js';
 
 /**
  * Two-way parent messaging on top of the SMS gateway queue.
@@ -181,12 +182,17 @@ export async function sendOutboundMessage(centerId, { student_id, body, staff_id
   const messageId = messageResult.lastInsertRowid;
 
   try {
-    await db
+    const inserted = await db
       .prepare(
         `INSERT INTO sms_queue (center_id, session_id, student_id, parent_phone, message, created_at)
          VALUES (?, NULL, ?, ?, ?, ?)`
       )
       .run(centerId, student.id, phone, body, createdAt);
+
+    // When Twilio is configured this sends immediately and marks the queue
+    // row sent/failed; otherwise it's a no-op and the row stays 'pending'
+    // for the Android gateway phone, unchanged from before this existed.
+    await attemptImmediateSend(centerId, inserted.lastInsertRowid, phone, body);
   } catch (err) {
     try {
       await db

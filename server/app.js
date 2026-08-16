@@ -18,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // unslugged for the pre-multi-tenant center (see middleware/center.js).
 const WHATSAPP_WEBHOOK_PATH = /^\/api(?:\/c\/[^/]+)?\/webhooks\/whatsapp$/;
 const ROSTER_IMPORT_PATH = /^\/api(?:\/c\/[^/]+)?\/admin\/roster-import$/;
+const TWILIO_SMS_WEBHOOK_PATH = /^\/api(?:\/c\/[^/]+)?\/webhooks\/sms$/;
 
 export function createApp() {
   const app = express();
@@ -35,13 +36,16 @@ export function createApp() {
   };
 
   // Roster upload is the only large payload; everything else stays small.
+  // Twilio posts application/x-www-form-urlencoded, not JSON.
   const jsonSmall = express.json({ limit: '256kb', verify: captureRawBody });
   const jsonLarge = express.json({ limit: '8mb' });
-  app.use((req, res, next) =>
-    ROSTER_IMPORT_PATH.test(req.path)
+  const urlencodedSmall = express.urlencoded({ extended: false, limit: '256kb' });
+  app.use((req, res, next) => {
+    if (TWILIO_SMS_WEBHOOK_PATH.test(req.path)) return urlencodedSmall(req, res, next);
+    return ROSTER_IMPORT_PATH.test(req.path)
       ? jsonLarge(req, res, next)
-      : jsonSmall(req, res, next)
-  );
+      : jsonSmall(req, res, next);
+  });
 
   app.use(cookieParser());
 

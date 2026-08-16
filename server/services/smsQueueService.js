@@ -1,6 +1,7 @@
 import db, { sqlNow } from '../db.js';
 import { isWhatsAppConfigured, sendAttendanceWhatsApp } from './whatsappService.js';
 import { composeAttendanceNotification } from './i18nService.js';
+import { attemptImmediateSend } from './twilioService.js';
 
 /**
  * Dispatch one check-in/check-out notification. Never throws: a queue or
@@ -38,19 +39,18 @@ export async function enqueueNotification(session, student, action, iso) {
 
     // The student row carries its own tenancy; the queue row inherits it so
     // the gateway poll for another center can never claim this message.
-    await db
+    const messageText = composeAttendanceNotification(student, action, iso);
+    const inserted = await db
       .prepare(
         `INSERT INTO sms_queue (center_id, session_id, student_id, parent_phone, message, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(
-        student.center_id,
-        session?.id ?? null,
-        student.id,
-        phone,
-        composeAttendanceNotification(student, action, iso),
-        sqlNow()
-      );
+      .run(student.center_id, session?.id ?? null, student.id, phone, messageText, sqlNow());
+
+    // When Twilio is configured this sends immediately and marks the row
+    // sent/failed; otherwise it's a no-op and the row stays 'pending' for
+    // the Android gateway phone, unchanged from before this existed.
+    await attemptImmediateSend(student.center_id, inserted.lastInsertRowid, phone, messageText);
 
     return { enqueued: true };
   } catch (err) {

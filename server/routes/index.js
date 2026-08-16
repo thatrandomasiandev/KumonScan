@@ -13,6 +13,7 @@ import insightsRoutes from './insights.routes.js';
 import exportRoutes from './export.routes.js';
 import webhooksRoutes from './webhooks.routes.js';
 import whatsappWebhookRoutes from './whatsappWebhook.routes.js';
+import twilioWebhookRoutes from './twilioWebhook.routes.js';
 import resourcesRoutes from './resources.routes.js';
 import caregiversRoutes from './caregivers.routes.js';
 import bookingRoutes from './booking.routes.js';
@@ -31,6 +32,7 @@ router.use(adminRoutes);
 router.use(messagingRoutes); // agent-1-messaging: /messages + /gateway/inbound
 router.use(insightsRoutes); // agent-7-insights: /insights/summary + /insights/at-risk
 router.use(whatsappWebhookRoutes); // agent-8-whatsapp: /webhooks/whatsapp (Meta inbound + delivery status)
+router.use(twilioWebhookRoutes); // Twilio inbound SMS: /webhooks/sms
 router.use(resourcesRoutes); // agent-5-resources
 router.use(caregiversRoutes); // agent-2-pickup-auth
 router.use(bookingRoutes); // agent-3-self-scheduling
