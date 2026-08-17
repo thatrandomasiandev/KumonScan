@@ -11,5 +11,8 @@
     "api/index.js": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron/digests", "schedule": "0 16 * * 1" }
+  ]
 }

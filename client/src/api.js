@@ -185,6 +185,17 @@ export const api = {
 
   getStaff: () => request('/staff'),
 
+  getDigests: ({ student_id } = {}) => {
+    const qs = student_id ? `?student_id=${encodeURIComponent(student_id)}` : '';
+    return request(`/admin/digests${qs}`);
+  },
+
+  sendDigestsNow: ({ student_id } = {}) =>
+    request('/admin/digests/send-now', {
+      method: 'POST',
+      body: JSON.stringify(student_id ? { student_id } : {}),
+    }),
+
   createStaff: ({ first_name, last_name, role, hourly_rate } = {}) =>
     request('/staff', {
       method: 'POST',

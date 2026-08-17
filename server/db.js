@@ -229,6 +229,7 @@ export const TENANT_TABLES = [
   'caregivers',
   'resources',
   'resource_usage',
+  'digest_log',
 ];
 
 /**

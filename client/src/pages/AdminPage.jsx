@@ -40,6 +40,7 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ClearOutlinedIcon from '@mui/icons-material/ClearOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import { api, formatTime, formatDuration } from '../api';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
@@ -781,6 +782,187 @@ function StudentSessionHistory({ student }) {
   );
 }
 
+const DIGEST_STATUS_STYLES = {
+  sent: { label: 'Sent', bgcolor: md3Colors.tertiaryContainer, color: md3Colors.tertiary },
+  pending: { label: 'Awaiting channel', bgcolor: md3Colors.surfaceVariant, color: md3Colors.onSurfaceVariant },
+  failed: { label: 'Failed', bgcolor: md3Colors.errorContainer, color: md3Colors.onErrorContainer },
+  skipped_no_contact: { label: 'No contact', bgcolor: 'transparent', color: md3Colors.onSurfaceVariant },
+};
+
+function DigestStatusChip({ status }) {
+  const style = DIGEST_STATUS_STYLES[status] || {
+    label: status,
+    bgcolor: md3Colors.surfaceVariant,
+    color: md3Colors.onSurfaceVariant,
+  };
+  return (
+    <Chip
+      size="small"
+      label={style.label}
+      variant={status === 'skipped_no_contact' ? 'outlined' : 'filled'}
+      sx={{ bgcolor: style.bgcolor, color: style.color, fontWeight: 500 }}
+    />
+  );
+}
+
+function ProgressDigestsSection({ timezone }) {
+  const { showSnackbar } = useSnackbar();
+  const [digests, setDigests] = useState(null);
+  const [filter, setFilter] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.getDigests();
+      setDigests(data.digests || []);
+    } catch (err) {
+      showSnackbar(err.message);
+      setDigests([]);
+    }
+  }, [showSnackbar]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleSendNow() {
+    setSending(true);
+    try {
+      const result = await api.sendDigestsNow();
+      const c = result.counts || {};
+      showSnackbar(
+        `Digests for ${result.period_start} to ${result.period_end}: ` +
+          `${c.sent || 0} sent, ${c.pending_no_channel || 0} awaiting channel, ` +
+          `${c.skipped_no_contact || 0} no contact, ${c.skipped_duplicate || 0} already generated, ` +
+          `${c.failed || 0} failed`
+      );
+      await load();
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const visible = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!digests) return [];
+    if (!q) return digests;
+    return digests.filter((d) => d.student_name.toLowerCase().includes(q));
+  }, [digests, filter]);
+
+  const awaitingChannel = useMemo(
+    () => (digests || []).some((d) => d.status === 'pending'),
+    [digests]
+  );
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mt: 3,
+        p: 3,
+        borderRadius: `${shape.large}px`,
+        bgcolor: getElevatedSurface(1),
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1 }}>
+        <Typography variant="titleMedium" sx={{ flex: 1, minWidth: 200 }}>
+          Progress Digests
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={sending ? <CircularProgress size={16} color="inherit" /> : <SendOutlinedIcon />}
+          onClick={handleSendNow}
+          disabled={sending}
+        >
+          {sending ? 'Sending…' : 'Send now'}
+        </Button>
+      </Box>
+      <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 2, display: 'block' }}>
+        Weekly attendance summaries for parents, generated every Monday for the completed
+        Mon–Sun week. Re-running a week never double-sends.
+        {awaitingChannel &&
+          ' Delivery is blocked until an SMS or WhatsApp channel is installed; digests are generated and logged in the meantime.'}
+      </Typography>
+
+      <TextField
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Filter by student name"
+        size="small"
+        fullWidth
+        sx={{ mb: 2 }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchOutlinedIcon sx={{ fontSize: 20, color: md3Colors.onSurfaceVariant }} />
+            </InputAdornment>
+          ),
+        }}
+      />
+
+      {digests === null ? (
+        <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, py: 2 }}>
+          Loading…
+        </Typography>
+      ) : visible.length === 0 ? (
+        <Box
+          sx={{
+            textAlign: 'center',
+            py: 4,
+            px: 2,
+            borderRadius: `${shape.medium}px`,
+            bgcolor: md3Colors.surfaceVariant,
+          }}
+        >
+          <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+            {digests.length === 0
+              ? 'No digests yet. The Monday cron or the Send now button creates the first batch.'
+              : `No digests match “${filter.trim()}”`}
+          </Typography>
+        </Box>
+      ) : (
+        <Box
+          sx={{
+            border: `1px solid ${md3Colors.outlineVariant}`,
+            borderRadius: `${shape.medium}px`,
+            overflow: 'hidden',
+          }}
+        >
+          {visible.map((digest, i) => (
+            <Box
+              key={digest.id}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                px: 2,
+                py: 1.25,
+                borderBottom: i < visible.length - 1 ? `1px solid ${md3Colors.outlineVariant}` : 'none',
+              }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="titleSmall" noWrap>
+                  {digest.student_name}
+                </Typography>
+                <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  Week {digest.period_start} to {digest.period_end}
+                  {digest.status === 'sent' && digest.sent_at
+                    ? ` · sent ${formatTime(digest.sent_at, timezone)} via ${digest.channel}`
+                    : ''}
+                </Typography>
+              </Box>
+              <DigestStatusChip status={digest.status} />
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Paper>
+  );
+}
+
 export default function AdminPage() {
   const [students, setStudents] = useState([]);
   const [present, setPresent] = useState(null);
@@ -1476,6 +1658,8 @@ export default function AdminPage() {
           )}
         </Box>
       </Box>
+
+      <ProgressDigestsSection timezone={present?.timezone} />
 
       <Fab
         color="primary"

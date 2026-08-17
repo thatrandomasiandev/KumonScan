@@ -19,6 +19,7 @@ import caregiversRoutes from './caregivers.routes.js';
 import bookingRoutes from './booking.routes.js';
 import statusRoutes from './status.routes.js';
 import parentAuthRoutes from './parentAuth.routes.js';
+import digestRoutes from './digests.routes.js';
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.use(caregiversRoutes); // agent-2-pickup-auth
 router.use(bookingRoutes); // agent-3-self-scheduling
 router.use(statusRoutes); // agent-observability: GET /status
 router.use(parentAuthRoutes); // agent-13-parent-pwa: /parent-auth/* + /parent/*
+router.use(digestRoutes); // agent-12-digests: /admin/digests* + /cron/digests
 router.use('/gateway', gatewayRoutes);
 router.use(exportRoutes); // agent-10-data-portability: /export/full
 // agent-10-data-portability: outbound subscription management. Mounted after
