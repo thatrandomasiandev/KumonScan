@@ -198,6 +198,12 @@ export async function wipeCenterData(...centerIds) {
   if (await tableExists('digest_log') && (await tableHasColumn('digest_log', 'center_id'))) {
     await db.prepare('DELETE FROM digest_log WHERE center_id = ANY(?::int[])').run(ids);
   }
+  if (await tableExists('audit_log') && (await tableHasColumn('audit_log', 'center_id'))) {
+    await db.prepare('DELETE FROM audit_log WHERE center_id = ANY(?::int[])').run(ids);
+  }
+  if (await tableExists('retention_policy') && (await tableHasColumn('retention_policy', 'center_id'))) {
+    await db.prepare('DELETE FROM retention_policy WHERE center_id = ANY(?::int[])').run(ids);
+  }
   if (await tableExists('student_progress')) {
     await db
       .prepare(

@@ -42,6 +42,7 @@ import ClearOutlinedIcon from '@mui/icons-material/ClearOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import { api, formatTime, formatDuration } from '../api';
+import PrivacySettings, { StudentPrivacyActions } from '../components/PrivacySettings';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import StaffPanel from '../components/StaffPanel';
@@ -1181,6 +1182,7 @@ export default function AdminPage() {
           <ResourceInventory />
           {/* agent-10-data-portability */}
           <DataPortabilityPanel />
+          <PrivacySettings />
         </>
       )}
 
@@ -1659,6 +1661,23 @@ export default function AdminPage() {
               <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
 
               <StudentSessionHistory student={selectedStudent} />
+
+              <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
+
+              <StudentPrivacyActions
+                student={selectedStudent}
+                onConsentSaved={(updated) => {
+                  setSelectedStudent(updated);
+                  setStudents((prev) =>
+                    prev.map((s) => (s.id === updated.id ? { ...s, ...updated, stats: s.stats } : s))
+                  );
+                }}
+                onPurged={(purgedId) => {
+                  setSelectedStudent(null);
+                  setStudents((prev) => prev.filter((s) => s.id !== purgedId));
+                  loadData();
+                }}
+              />
             </Paper>
           )}
         </Box>

@@ -230,6 +230,8 @@ export const TENANT_TABLES = [
   'resources',
   'resource_usage',
   'digest_log',
+  'audit_log',
+  'retention_policy',
 ];
 
 /**
@@ -312,6 +314,27 @@ async function migrateTenancy() {
   if (settingsPk.length > 0 && !settingsPk.some((r) => r.column_name === 'center_id')) {
     await exec(`ALTER TABLE settings DROP CONSTRAINT ${settingsPk[0].constraint_name}`);
     await exec('ALTER TABLE settings ADD PRIMARY KEY (center_id, key)');
+  }
+
+  // retention_policy: PRIMARY KEY (key) -> PRIMARY KEY (center_id, key), so
+  // two centers can each set `retention:sessions` independently. The table is
+  // new (agent-privacy); this rebuild covers a shared test DB that already
+  // created it without center_id.
+  if (await tableExists('retention_policy')) {
+    const retentionPk = await all(
+      `SELECT kcu.column_name, tc.constraint_name
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.key_column_usage kcu
+         ON kcu.constraint_name = tc.constraint_name
+        AND kcu.table_schema = tc.table_schema
+       WHERE tc.table_schema = 'public'
+         AND tc.table_name = 'retention_policy'
+         AND tc.constraint_type = 'PRIMARY KEY'`
+    );
+    if (retentionPk.length > 0 && !retentionPk.some((r) => r.column_name === 'center_id')) {
+      await exec(`ALTER TABLE retention_policy DROP CONSTRAINT ${retentionPk[0].constraint_name}`);
+      await exec('ALTER TABLE retention_policy ADD PRIMARY KEY (center_id, key)');
+    }
   }
 
   // Name uniqueness is per center: two centers can both enroll an

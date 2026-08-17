@@ -338,6 +338,63 @@ export const api = {
     }),
 
   deleteWebhook: (id) => request(`/webhooks/${id}`, { method: 'DELETE' }),
+
+  // Privacy & data handling (agent-privacy)
+
+  getAuditLog: ({ entity_type, entity_id, start, end, limit } = {}) => {
+    const params = new URLSearchParams();
+    if (entity_type) params.set('entity_type', entity_type);
+    if (entity_id) params.set('entity_id', entity_id);
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString();
+    return request(`/admin/audit-log${qs ? `?${qs}` : ''}`);
+  },
+
+  getRetentionSettings: () => request('/admin/privacy/retention'),
+
+  setRetentionPolicy: ({ table, retain_days }) =>
+    request('/admin/privacy/retention', {
+      method: 'PUT',
+      body: JSON.stringify({ table, retain_days, confirm: true }),
+    }),
+
+  clearRetentionPolicy: (table) =>
+    request('/admin/privacy/retention', {
+      method: 'PUT',
+      body: JSON.stringify({ table, retain_days: null }),
+    }),
+
+  purgeExpiredData: () =>
+    request('/admin/privacy/purge-expired', { method: 'POST' }),
+
+  downloadStudentDataExport: async (id) => {
+    const response = await fetch(`${apiBase()}/admin/privacy/export-student-data/${id}`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ||
+      `kumonscan-student-${id}-data.json`;
+    return { blob, filename };
+  },
+
+  purgeStudent: (id, confirm_name) =>
+    request(`/admin/students/${id}/purge`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm_name }),
+    }),
+
+  setStudentConsent: (id, contact_consent_on_file) =>
+    request(`/admin/students/${id}/consent`, {
+      method: 'PATCH',
+      body: JSON.stringify({ contact_consent_on_file }),
+    }),
 };
 
 export function formatTime(isoString, timezone) {

@@ -21,9 +21,12 @@ import statusRoutes from './status.routes.js';
 import parentAuthRoutes from './parentAuth.routes.js';
 import digestRoutes from './digests.routes.js';
 import curriculumRoutes from './curriculum.routes.js';
+import privacyRoutes from './privacy.routes.js';
+import { auditTrailMiddleware } from '../services/auditLogService.js';
 
 const router = Router();
 
+router.use(auditTrailMiddleware); // agent-privacy: wrap writes before feature routers
 router.use(authRoutes);
 router.use(kioskRoutes);
 router.use(remoteAttendanceRoutes); // agent-4-hybrid-attendance: intercepts /check-in mode='remote', must precede deskRoutes
@@ -43,6 +46,7 @@ router.use(statusRoutes); // agent-observability: GET /status
 router.use(parentAuthRoutes); // agent-13-parent-pwa: /parent-auth/* + /parent/*
 router.use(digestRoutes); // agent-12-digests: /admin/digests* + /cron/digests
 router.use(curriculumRoutes); // agent-curriculum: /curriculum/levels + /students/:id/progress + /reports/progress-pace
+router.use(privacyRoutes); // agent-privacy: /admin/audit-log, /admin/privacy/*, /admin/students/:id/{purge,consent}
 router.use('/gateway', gatewayRoutes);
 router.use(exportRoutes); // agent-10-data-portability: /export/full
 // agent-10-data-portability: outbound subscription management. Mounted after
