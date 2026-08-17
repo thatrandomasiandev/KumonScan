@@ -25,9 +25,10 @@ const SUBJECT_OPTIONS = [
 ];
 
 async function bookingRequest(path, options = {}) {
+  const { headers, ...rest } = options;
   const response = await fetch(`/api/c/${getCenterSlug()}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
+    ...rest,
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {

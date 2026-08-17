@@ -20,10 +20,14 @@ function apiBase() {
 }
 
 async function request(path, options = {}) {
+  const { headers, ...rest } = options;
   const response = await fetch(`${apiBase()}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
+    ...rest,
+    // Headers must win over `...rest`. Spreading options after headers
+    // dropped Content-Type whenever check-in/out passed Idempotency-Key,
+    // so Express left req.body empty and returned "student_id is required".
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
 
   const data = await response.json().catch(() => ({}));
