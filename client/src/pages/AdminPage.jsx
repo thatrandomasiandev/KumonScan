@@ -522,7 +522,7 @@ function StudentScheduleEditor({ student, onSaved }) {
   );
 }
 
-function StudentSessionHistory({ student }) {
+function StudentSessionHistory({ student, timezone }) {
   const { showSnackbar } = useSnackbar();
   const [sessions, setSessions] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -596,8 +596,6 @@ function StudentSessionHistory({ student }) {
     setSessions(null);
     setExpanded(false);
   }, [student.id]);
-
-  const timezone = 'America/Los_Angeles';
 
   return (
     <Box sx={{ mt: 3 }}>
@@ -1658,7 +1656,7 @@ export default function AdminPage() {
 
               <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
 
-              <StudentSessionHistory student={selectedStudent} />
+              <StudentSessionHistory student={selectedStudent} timezone={present?.timezone} />
             </Paper>
           )}
         </Box>
