@@ -2,9 +2,13 @@
 
 Five procedures an operator actually runs. Commands verified against the codebase at `b8f51ea` on 2026-08-01. `<domain>` is the production domain; `<slug>` is the center's tenant slug.
 
-## 1. Is the SMS gateway phone online?
+## 1. Are parent texts going out?
 
-The gateway phone posts a heartbeat to `POST /api/gateway/heartbeat` (authenticated with `GATEWAY_API_KEY`). The server stores the timestamp in the `settings` table under `gateway_last_seen`.
+**Twilio (live channel).** When `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are set, check-in/out and Admin Messages send immediately via Twilio. Confirm on Status (`GET /api/status`, staff cookie): `checks.sms_gateway.channel` is `twilio` and status is `ok`. Queue depth is in the same payload (`pending` / `failed`). Inbound replies require the Twilio number's **A message comes in** webhook set to `https://<domain>/api/webhooks/sms`.
+
+If Status shows Twilio configured but `failed` > 0: open the Twilio console debugger for error 30034 (US A2P 10DLC not registered), 21610 (recipient opted out), or 21211 (invalid number). Failed rows stay in `sms_queue` with `last_error` set; they are not retried automatically.
+
+**Android gateway fallback.** Used only when Twilio is unset. The gateway phone posts a heartbeat to `POST /api/gateway/heartbeat` (authenticated with `GATEWAY_API_KEY`). The server stores the timestamp in the `settings` table under `gateway_last_seen`.
 
 Check it as a center admin (session cookie required, or use the Admin page which surfaces the same data):
 
@@ -12,9 +16,9 @@ Check it as a center admin (session cookie required, or use the Admin page which
 curl -b "admin_session=<cookie>" https://<domain>/api/c/<slug>/admin/gateway-status
 ```
 
-Response: `configured` (whether `GATEWAY_API_KEY` is set), `last_seen_at`, `seconds_since_seen`. The phone is considered offline when `seconds_since_seen` exceeds 600 (`GATEWAY_HEARTBEAT_STALE_SECONDS`).
+Response: `twilio_configured`, `gateway_configured`, `channel` (`twilio` | `gateway` | null), `last_seen_at`, `seconds_since_seen`. The phone is considered offline when Twilio is unset and `seconds_since_seen` exceeds 600 (`GATEWAY_HEARTBEAT_STALE_SECONDS`).
 
-If offline: on the phone, confirm the KumonScan Gateway app's foreground service is running, the app is excluded from battery optimization, and the phone has signal. Undelivered notifications are not lost; they sit in `sms_queue` with `status='pending'` and send once the phone reconnects.
+If the fallback phone is offline: on the phone, confirm the KumonScan Gateway app's foreground service is running, the app is excluded from battery optimization, and the phone has signal. Undelivered notifications are not lost; they sit in `sms_queue` with `status='pending'` and send once the phone reconnects (or once Twilio is configured and the next enqueue claims them; already-pending rows are not auto-drained by Twilio).
 
 ## 2. Rotate a center's admin password
 

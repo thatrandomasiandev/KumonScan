@@ -10,6 +10,7 @@ import {
   WEEKDAYS,
 } from '../services/capacityService.js';
 import { GATEWAY_LAST_SEEN_KEY } from './gateway.routes.js';
+import { isTwilioConfigured } from '../services/twilioService.js';
 import { logger } from '../services/loggingService.js';
 
 const router = Router();
@@ -157,8 +158,8 @@ router.put('/admin/capacity', requireAdmin, requireRole('manager'), async (req, 
 });
 
 /**
- * Staff-facing gateway health: when the phone last polled and how deep the
- * queue is, so Admin can see whether texts are actually going out.
+ * Staff-facing SMS health: which sender is live (Twilio vs Android gateway
+ * phone), when the phone last polled, and how deep the queue is.
  */
 router.get('/admin/gateway-status', requireAdmin, async (req, res) => {
   const lastSeenRow = await db
@@ -180,9 +181,14 @@ router.get('/admin/gateway-status', requireAdmin, async (req, res) => {
   const secondsSinceSeen = lastSeenAt
     ? Math.max(0, Math.round((Date.now() - new Date(lastSeenAt).getTime()) / 1000))
     : null;
+  const twilioConfigured = isTwilioConfigured();
+  const gatewayConfigured = Boolean(process.env.GATEWAY_API_KEY);
 
   res.json({
-    configured: Boolean(process.env.GATEWAY_API_KEY),
+    configured: twilioConfigured || gatewayConfigured,
+    twilio_configured: twilioConfigured,
+    gateway_configured: gatewayConfigured,
+    channel: twilioConfigured ? 'twilio' : gatewayConfigured ? 'gateway' : null,
     last_seen_at: lastSeenAt,
     seconds_since_seen: secondsSinceSeen,
     pending: Number(counts?.pending || 0),

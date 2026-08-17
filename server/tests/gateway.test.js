@@ -159,6 +159,7 @@ describe('SMS gateway endpoints', () => {
 
     expect(status.status).toBe(200);
     expect(status.body.configured).toBe(true);
+    expect(status.body.gateway_configured).toBe(true);
     expect(status.body.last_seen_at).toBeTruthy();
     expect(status.body.seconds_since_seen).toBeGreaterThanOrEqual(0);
     expect(status.body.pending).toBe(1);
