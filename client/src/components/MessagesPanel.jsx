@@ -32,10 +32,11 @@ const THREAD_POLL_MS = 20_000;
  * center's data once a second center exists.
  */
 async function request(path, options = {}) {
+  const { headers, ...rest } = options;
   const response = await fetch(`/api/c/${getCenterSlug()}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
+    ...rest,
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
