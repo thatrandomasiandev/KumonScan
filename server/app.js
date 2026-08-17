@@ -69,9 +69,10 @@ export function createApp() {
 
   // Legacy unslugged paths resolve to the original center so existing
   // bookmarked URLs, the gateway phone, and configured webhooks keep working.
-  // Vercel Cron also lands here (/api/cron/digests): the digest cron handler
-  // ignores req.center and processes every center's students in one pass, so
-  // which center this middleware resolves is irrelevant to it.
+  // Vercel Cron also lands here (/api/cron/digests, /api/demo/reset): the
+  // digest cron handler ignores req.center and processes every center's
+  // students in one pass; /api/demo/reset 404s unless DEMO_MODE=true, so
+  // which center this middleware resolves is irrelevant to both.
   const defaultScoped = Router();
   defaultScoped.use(resolveDefaultCenter);
   defaultScoped.use(apiRoutes);

@@ -21,6 +21,7 @@ import statusRoutes from './status.routes.js';
 import parentAuthRoutes from './parentAuth.routes.js';
 import digestRoutes from './digests.routes.js';
 import curriculumRoutes from './curriculum.routes.js';
+import demoRoutes from './demo.routes.js';
 
 const router = Router();
 
@@ -43,6 +44,7 @@ router.use(statusRoutes); // agent-observability: GET /status
 router.use(parentAuthRoutes); // agent-13-parent-pwa: /parent-auth/* + /parent/*
 router.use(digestRoutes); // agent-12-digests: /admin/digests* + /cron/digests
 router.use(curriculumRoutes); // agent-curriculum: /curriculum/levels + /students/:id/progress + /reports/progress-pace
+router.use(demoRoutes); // agent-demo: /demo/reset (404 unless DEMO_MODE=true)
 router.use('/gateway', gatewayRoutes);
 router.use(exportRoutes); // agent-10-data-portability: /export/full
 // agent-10-data-portability: outbound subscription management. Mounted after

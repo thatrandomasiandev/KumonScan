@@ -34,6 +34,8 @@ Set these in the Vercel project that serves `api/index.js`. "Fail behavior" is w
 | `PARENT_SESSION_SECRET` | No | HMAC key for signing parent magic-link `parent_session` cookies (`server/services/parentAuthService.js`). | Falls back to `` `parent::${ADMIN_SESSION_SECRET \|\| ADMIN_PASSWORD}` ``. |
 | `PUBLIC_BASE_URL` | No | Absolute origin used to build the parent magic-link URL (`server/routes/parentAuth.routes.js`). | Falls back to the request's own protocol/host, which is correct behind Vercel but should be set explicitly if the app is ever reachable at more than one hostname. |
 | `PORT` | Local only | Listen port for `server/index.js` (local/Railway process mode). Unused on Vercel, which invokes `api/index.js` as a function. | Defaults to 3001. |
+| `CRON_SECRET` | For scheduled jobs | Bearer token Vercel Cron sends to `GET /api/cron/digests` and `GET /api/demo/reset`. | Cron endpoints reject unauthenticated calls (`digests.routes.js` 503s when unset; demo reset 401s). |
+| `DEMO_MODE` | Demo deployment only | Marks a deployment as the sales demo (`docs/DEMO.md`): enables `/api/demo/reset` and the seed-script wipe guards. | Demo features disabled (reset 404s). Never set on a deployment whose `DATABASE_URL` holds real center data. |
 
 ## Platform-provided (never set by hand)
 
@@ -54,14 +56,9 @@ Set these in the Vercel project that serves `api/index.js`. "Fail behavior" is w
 |---|---|---|---|
 | `DATABASE_URL` | Yes | Neon connection string for the `leads` table (`marketing-site/api/lead.js`). | Fail closed: `POST /api/lead` returns 503 and logs the misconfiguration. |
 
-## Landing with the integration pass (unmerged agent branches, audited per branch)
+## Landing with the integration pass (unmerged agent branches)
 
-These are referenced on branches not yet reintegrated as of this edit. Re-verify this table against `main` after integration lands; the reintegration may rename or drop some. `agent-billing` (Stripe tuition billing) is excluded from integration by product decision, not a merge-ordering gap — its `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` vars are intentionally omitted here.
-
-| Variable | Branch | Purpose | Behavior when unset (as written on the branch) |
-|---|---|---|---|
-| `CRON_SECRET` | `agent-12-digests`, `agent-demo` | Authenticates Vercel cron invocations (digest send, demo reset). | Cron endpoints reject unauthenticated calls. |
-| `DEMO_MODE` | `agent-demo` | Marks a deployment as the sales demo (guarded seed, nightly reset). | Demo features disabled. Never set on the production deployment. |
+`agent-billing` (Stripe tuition billing) is excluded from integration by product decision, not a merge-ordering gap — its `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` vars are intentionally omitted here.
 
 ## Security pass (2026-08-01, at `b8f51ea`)
 
