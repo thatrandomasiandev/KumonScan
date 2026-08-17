@@ -5,6 +5,7 @@ import db from '../db.js';
 import { enqueueNotification } from '../services/smsQueueService.js';
 import { sendOutboundMessage } from '../services/messagingService.js';
 import { computeTwilioSignature, isTwilioConfigured, sendTwilioSms } from '../services/twilioService.js';
+import { checkSmsGateway } from '../routes/status.routes.js';
 import { defaultCenter, insertStudent, loginCookie, wipeCenterData } from './helpers.js';
 
 const TEST_IP = '198.51.100.60';
@@ -264,6 +265,35 @@ describe('Twilio SMS channel', () => {
       const messages = await db.prepare('SELECT * FROM messages').all();
       expect(messages).toHaveLength(1);
       expect(messages[0].student_id).toBeNull();
+    });
+  });
+
+  describe('status and admin gateway-status', () => {
+    it('checkSmsGateway reports the twilio channel when credentials are set', async () => {
+      const result = await checkSmsGateway(center.id);
+      expect(result).toMatchObject({ status: 'ok', channel: 'twilio' });
+      expect(result.detail).toMatch(/Twilio/);
+    });
+
+    it('GET /api/admin/gateway-status reports twilio as the live channel', async () => {
+      const res = await request(app)
+        .get('/api/admin/gateway-status')
+        .set('Cookie', cookie)
+        .set('X-Forwarded-For', TEST_IP);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        configured: true,
+        twilio_configured: true,
+        channel: 'twilio',
+      });
+    });
+
+    it('checkSmsGateway is not_configured when Twilio is unset and no gateway heartbeat', async () => {
+      stubTwilioEnv({ TWILIO_ACCOUNT_SID: undefined });
+      const result = await checkSmsGateway(center.id);
+      expect(result.status).toBe('not_configured');
+      expect(result.channel).toBeUndefined();
     });
   });
 });

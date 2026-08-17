@@ -2,13 +2,15 @@ import { Router } from 'express';
 import db from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { recentErrorCount } from '../services/errorReportingService.js';
+import { isTwilioConfigured } from '../services/twilioService.js';
 import { GATEWAY_LAST_SEEN_KEY } from './gateway.routes.js';
 
 /**
  * GET /api/status — staff-authenticated ops surface (center-scoped).
  *
- * Aggregates database reachability, SMS gateway heartbeat + queue depth,
- * webhook subscription health, and 24h captured-error count in one payload.
+ * Aggregates database reachability, SMS channel (Twilio or Android gateway)
+ * plus queue depth, webhook subscription health, and 24h captured-error
+ * count in one payload.
  * Every check runs through `runCheck`, which converts a thrown error into a
  * `down` result for that check alone.
  *
@@ -87,11 +89,33 @@ async function smsQueueCounts(centerId) {
 }
 
 export async function checkSmsGateway(centerId) {
+  const queue = await smsQueueCounts(centerId);
+
+  if (isTwilioConfigured()) {
+    const pending = queue?.pending ?? 0;
+    const failed = queue?.failed ?? 0;
+    let status = 'ok';
+    let detail = 'Twilio direct-send configured';
+    if (failed > 0) {
+      status = 'warn';
+      detail = `Twilio configured; ${failed} failed message(s) in queue`;
+    } else if (pending > 0) {
+      status = 'warn';
+      detail = `Twilio configured; ${pending} pending message(s) not yet sent`;
+    }
+    return {
+      status,
+      detail,
+      channel: 'twilio',
+      queue: queue || { pending: 0, failed: 0 },
+    };
+  }
+
   const lastSeen = await readGatewayLastSeen(centerId);
   if (!lastSeen) {
     return {
       status: 'not_configured',
-      detail: 'no gateway_last_seen heartbeat recorded (SMS gateway not set up)',
+      detail: 'no Twilio credentials and no gateway_last_seen heartbeat',
     };
   }
 
@@ -103,11 +127,11 @@ export async function checkSmsGateway(centerId) {
     detail: stale
       ? `last heartbeat ${secondsAgo}s ago (stale after ${GATEWAY_STALE_SECONDS}s)`
       : `last heartbeat ${secondsAgo}s ago`,
+    channel: 'gateway',
     last_seen: lastSeen,
     seconds_since_heartbeat: secondsAgo,
   };
 
-  const queue = await smsQueueCounts(centerId);
   if (queue) {
     result.queue = queue;
     if (result.status === 'ok' && queue.failed > 0) {

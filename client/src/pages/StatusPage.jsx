@@ -49,8 +49,8 @@ const CHECK_LABELS = {
     description: 'Neon Postgres reachability (trivial query with timeout)',
   },
   sms_gateway: {
-    title: 'SMS gateway',
-    description: 'Gateway phone heartbeat recency and message queue depth',
+    title: 'SMS',
+    description: 'Twilio direct-send, or Android gateway heartbeat and queue depth',
   },
   webhooks: {
     title: 'Webhook delivery',
@@ -149,7 +149,7 @@ export default function StatusPage() {
     <Box sx={{ maxWidth: 720, mx: 'auto' }}>
       <PageHeader
         title="System status"
-        subtitle="Live health of the app, database, SMS gateway, and webhook delivery."
+        subtitle="Live health of the app, database, SMS, and webhook delivery."
         action={
           <Button
             variant="outlined"
