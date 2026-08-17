@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, Routes, Route, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -11,7 +11,7 @@ import InsightsPage from './pages/InsightsPage'; // agent-7-insights
 import BookingPage from './pages/BookingPage'; // agent-3-self-scheduling
 import StatusPage from './pages/StatusPage'; // agent-observability
 import ParentApp from './parent/ParentApp'; // agent-13-parent-pwa
-import { setCenterSlug } from './api';
+import { api, setCenterSlug } from './api';
 import { DEFAULT_CENTER_SLUG } from './centerPath';
 
 /**
@@ -24,6 +24,28 @@ function CenterScope({ children }) {
     setCenterSlug(centerSlug);
   }, [centerSlug]);
   return children;
+}
+
+/**
+ * Staff messages live outside DeskPage/AdminPage, so this route loads
+ * GET /present solely for the center's configured timezone (same source
+ * DeskPage and AdminPage already use).
+ */
+function MessagesRoute() {
+  const [timezone, setTimezone] = useState();
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPresent()
+      .then((data) => {
+        if (!cancelled && data?.timezone) setTimezone(data.timezone);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return <MessagesPanel timezone={timezone} />;
 }
 
 function CenterRoutes() {
@@ -59,7 +81,7 @@ function CenterRoutes() {
                   path="messages"
                   element={
                     <ProtectedRoute>
-                      <MessagesPanel />
+                      <MessagesRoute />
                     </ProtectedRoute>
                   }
                 />
