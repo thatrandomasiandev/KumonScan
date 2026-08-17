@@ -4,6 +4,7 @@ import { sqlNow, withRealTransaction } from './db.js';
 import { normalizeName, validateNameField } from './utils/names.js';
 import { normalizeSubjects } from './sessionRules.js';
 import { normalizeScheduleDaysInput, WEEKDAY_SHORTS } from './timeService.js';
+import { parseStudentNumber } from './services/studentService.js';
 
 export const DELIMITER_NAMES = {
   '\t': 'tab',
@@ -68,11 +69,13 @@ function updateStudentSql({
   hasSubjectsValue,
   hasDaysColumn,
   hasActiveColumn,
+  hasStudentNumberColumn,
 }) {
   const setClauses = [];
   if (hasSubjectsColumn && hasSubjectsValue) setClauses.push('enrolled_subjects = ?');
   if (hasDaysColumn) setClauses.push('schedule_days = ?');
   if (hasActiveColumn) setClauses.push('active = ?');
+  if (hasStudentNumberColumn) setClauses.push('student_number = ?');
   setClauses.push("parent_phone = COALESCE(NULLIF(?, ''), parent_phone)");
 
   return `UPDATE students
@@ -208,6 +211,14 @@ export async function importRosterFromContent(
     'father cell phone',
     'home phone',
   ]);
+  const hasStudentNumberColumn = headerHasAny(normalizedHeaderSet, [
+    'student id',
+    'student_id',
+    'student number',
+    'student_number',
+    'id number',
+    'id',
+  ]);
 
   const summary = {
     created: 0,
@@ -262,6 +273,29 @@ export async function importRosterFromContent(
           ])
         : '';
 
+      let student_number = null;
+      if (hasStudentNumberColumn) {
+        const rawId = firstNonBlankValue(normalized, [
+          'student id',
+          'student_id',
+          'student number',
+          'student_number',
+          'id number',
+          'id',
+        ]);
+        if (rawId !== '') {
+          try {
+            student_number = parseStudentNumber(rawId);
+          } catch (err) {
+            summary.skipped.push({
+              row: label,
+              reason: err.message || 'Invalid student ID',
+            });
+            continue;
+          }
+        }
+      }
+
       candidates.push({
         first_name,
         last_name,
@@ -270,6 +304,8 @@ export async function importRosterFromContent(
         schedule_days,
         active,
         parent_phone,
+        student_number,
+        hasStudentNumberValue: student_number != null,
       });
     } catch (err) {
       summary.errored.push({ row: label, error: err.message });
@@ -284,16 +320,25 @@ export async function importRosterFromContent(
       `SELECT * FROM students
        WHERE center_id = ? AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)`
     );
+    const findByNumber = tx.prepare(
+      'SELECT * FROM students WHERE center_id = ? AND student_number = ?'
+    );
     const insertStudent = tx.prepare(
       `INSERT INTO students
-         (center_id, first_name, last_name, active, enrolled_subjects, schedule_days, parent_phone, registered_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         (center_id, first_name, last_name, active, enrolled_subjects, schedule_days, parent_phone, student_number, registered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     const touchedIds = [];
 
     for (const row of candidates) {
-      const existing = await findByName.get(centerId, row.first_name, row.last_name);
+      let existing =
+        row.hasStudentNumberValue
+          ? await findByNumber.get(centerId, row.student_number)
+          : null;
+      if (!existing) {
+        existing = await findByName.get(centerId, row.first_name, row.last_name);
+      }
 
       if (existing) {
         const updateStudent = tx.prepare(
@@ -302,12 +347,16 @@ export async function importRosterFromContent(
             hasSubjectsValue: row.hasSubjectsValue,
             hasDaysColumn,
             hasActiveColumn,
+            hasStudentNumberColumn: hasStudentNumberColumn && row.hasStudentNumberValue,
           })
         );
         const params = [];
         if (hasSubjectsColumn && row.hasSubjectsValue) params.push(row.enrolled_subjects);
         if (hasDaysColumn) params.push(row.schedule_days);
         if (hasActiveColumn) params.push(row.active);
+        if (hasStudentNumberColumn && row.hasStudentNumberValue) {
+          params.push(row.student_number);
+        }
         params.push(row.parent_phone, existing.id, centerId);
         await updateStudent.run(...params);
         summary.updated++;
@@ -321,6 +370,7 @@ export async function importRosterFromContent(
           row.enrolled_subjects,
           row.schedule_days,
           row.parent_phone || null,
+          row.student_number,
           sqlNow()
         );
         summary.created++;
@@ -360,6 +410,7 @@ export async function importRosterFromContent(
       hasDaysColumn,
       hasActiveColumn,
       hasPhoneColumn,
+      hasStudentNumberColumn,
     },
   };
 }

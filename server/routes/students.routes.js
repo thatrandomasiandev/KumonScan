@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import db, { sqlNow } from '../db.js';
+import db, { isUniqueViolation, sqlNow } from '../db.js';
 import {
   getCenterTimezone,
   getDateInTimezone,
@@ -20,7 +20,8 @@ import {
   serializeStudent,
   getStudentStats,
   correctSessionTimes,
-  insertStudentWithNumber,
+  insertStudent,
+  parseStudentNumber,
 } from '../services/studentService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { getSupportedLanguages } from '../services/i18nService.js';
@@ -137,16 +138,33 @@ router.post('/students', requireAdmin, async (req, res) => {
 
   const enrolled_subjects = normalizeSubjects(rawEnrolled) || 'both';
 
-  const studentId = await insertStudentWithNumber(req.center.id, async (tx, studentNumber) => {
-    const result = await tx
-      .prepare(
-        `INSERT INTO students
-           (center_id, first_name, last_name, enrolled_subjects, registered_at, student_number)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(req.center.id, first_name, last_name, enrolled_subjects, sqlNow(), studentNumber);
-    return result.lastInsertRowid;
-  });
+  let student_number = null;
+  if (req.body.student_number !== undefined && req.body.student_number !== null && req.body.student_number !== '') {
+    try {
+      student_number = parseStudentNumber(req.body.student_number);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
+  let studentId;
+  try {
+    studentId = await insertStudent(req.center.id, async (tx) => {
+      const result = await tx
+        .prepare(
+          `INSERT INTO students
+             (center_id, first_name, last_name, enrolled_subjects, registered_at, student_number)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .run(req.center.id, first_name, last_name, enrolled_subjects, sqlNow(), student_number);
+      return result.lastInsertRowid;
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      return res.status(409).json({ error: 'A student with that ID already exists at this center' });
+    }
+    throw err;
+  }
 
   const student = await db
     .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
@@ -240,14 +258,31 @@ router.patch('/students/:id', requireAdmin, async (req, res) => {
     values.push(raw.trim().toLowerCase());
   }
 
+  if (req.body.student_number !== undefined) {
+    try {
+      const parsed = parseStudentNumber(req.body.student_number);
+      updates.push('student_number = ?');
+      values.push(parsed);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No valid fields to update' });
   }
 
   values.push(student.id, req.center.id);
-  await db
-    .prepare(`UPDATE students SET ${updates.join(', ')} WHERE id = ? AND center_id = ?`)
-    .run(...values);
+  try {
+    await db
+      .prepare(`UPDATE students SET ${updates.join(', ')} WHERE id = ? AND center_id = ?`)
+      .run(...values);
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      return res.status(409).json({ error: 'A student with that ID already exists at this center' });
+    }
+    throw err;
+  }
 
   const updated = await db
     .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')

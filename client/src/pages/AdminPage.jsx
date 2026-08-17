@@ -294,6 +294,9 @@ function CurrentlyHere({ present, timezone }) {
 
 function StudentScheduleEditor({ student, onSaved }) {
   const { showSnackbar } = useSnackbar();
+  const [studentId, setStudentId] = useState(
+    student.student_number != null ? String(student.student_number) : ''
+  );
   const [enrolled, setEnrolled] = useState(student.enrolled_subjects || 'both');
   const [days, setDays] = useState(() => student.schedule_days || []);
   const [phone, setPhone] = useState(student.parent_phone || '');
@@ -303,6 +306,7 @@ function StudentScheduleEditor({ student, onSaved }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    setStudentId(student.student_number != null ? String(student.student_number) : '');
     setEnrolled(student.enrolled_subjects || 'both');
     setDays(student.schedule_days || []);
     setPhone(student.parent_phone || '');
@@ -311,6 +315,7 @@ function StudentScheduleEditor({ student, onSaved }) {
     setLanguage(student.preferred_language || DEFAULT_LANGUAGE);
   }, [
     student.id,
+    student.student_number,
     student.enrolled_subjects,
     student.schedule_days,
     student.parent_phone,
@@ -320,6 +325,7 @@ function StudentScheduleEditor({ student, onSaved }) {
   ]);
 
   const dirty =
+    studentId.trim() !== (student.student_number != null ? String(student.student_number) : '') ||
     enrolled !== (student.enrolled_subjects || 'both') ||
     JSON.stringify([...(days || [])].sort()) !==
       JSON.stringify([...(student.schedule_days || [])].sort()) ||
@@ -335,14 +341,19 @@ function StudentScheduleEditor({ student, onSaved }) {
   async function handleSave() {
     setSaving(true);
     try {
-      const updated = await api.updateStudent(student.id, {
+      const payload = {
         enrolled_subjects: enrolled,
         schedule_days: days,
         parent_phone: phone.trim() || null,
         notify_channel: notifyChannel,
         parent_whatsapp: whatsapp.trim() || null,
         preferred_language: language,
-      });
+      };
+      const trimmedId = studentId.trim();
+      if (trimmedId !== (student.student_number != null ? String(student.student_number) : '')) {
+        payload.student_number = trimmedId === '' ? null : trimmedId;
+      }
+      const updated = await api.updateStudent(student.id, payload);
       showSnackbar(`Saved for ${updated.name}`);
       onSaved?.(updated);
     } catch (err) {
@@ -362,6 +373,17 @@ function StudentScheduleEditor({ student, onSaved }) {
       <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 1.5, display: 'block' }}>
         Subjects and expected days drive desk defaults and the absence list
       </Typography>
+
+      <TextField
+        label="Kumon student ID"
+        value={studentId}
+        onChange={(e) => setStudentId(e.target.value.replace(/\D/g, '').slice(0, 13))}
+        placeholder="From CRM roster (optional until import)"
+        fullWidth
+        inputMode="numeric"
+        sx={{ mb: 2.5 }}
+        helperText="The center’s official student number — set via roster import or enter here"
+      />
 
       <ToggleButtonGroup
         exclusive
@@ -1309,7 +1331,7 @@ export default function AdminPage() {
                   primary={student.name}
                   secondary={
                     <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }} noWrap>
-                      {student.student_number ? `#${student.student_number}` : ''}
+                      {student.student_number ? `ID ${student.student_number}` : 'No ID set'}
                       {!student.active ? ' · inactive' : ''}
                     </Typography>
                   }
@@ -1363,8 +1385,10 @@ export default function AdminPage() {
               </Typography>
               <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 1.5 }}>
                 After Personal Orientations, export students from the Kumon CRM and upload here. This is the
-                roster sync path (CRM has no public API). Name match updates existing students; new names are
-                added. The standard CRM export has no schedule-day column — set days below after import.
+                roster sync path (CRM has no public API). Include the Kumon student ID column when
+                available — that becomes each child&apos;s official ID in KumonScan. Name or ID match
+                updates existing students; new rows are added. The standard CRM export has no schedule-day
+                column — set days below after import.
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                 <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
@@ -1586,7 +1610,7 @@ export default function AdminPage() {
                   <Typography variant="titleLarge">{selectedStudent.name}</Typography>
                   {selectedStudent.student_number && (
                     <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
-                      {`Student #${selectedStudent.student_number}`}
+                      {`ID ${selectedStudent.student_number}`}
                     </Typography>
                   )}
                 </Box>

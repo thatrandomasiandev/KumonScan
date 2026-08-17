@@ -193,11 +193,12 @@ export function payrollReportToXlsx(report) {
 
 /**
  * Documents the columns importRosterFromContent (server/rosterImport.js)
- * actually accepts: first/last name required, subjects/days/active/phone
- * optional. Used for the "download sample roster" links in Admin.
+ * actually accepts: first/last name required; student id, subjects, days,
+ * active, and phone optional.
  */
 const ROSTER_TEMPLATE_ROWS = [
   {
+    'student id': '8401551142645',
     'first name': 'Alex',
     'last name': 'Kim',
     subjects: 'both',
@@ -206,6 +207,7 @@ const ROSTER_TEMPLATE_ROWS = [
     phone: '+15551234567',
   },
   {
+    'student id': '8402450097982',
     'first name': 'Jordan',
     'last name': 'Lee',
     subjects: 'math',
@@ -214,6 +216,7 @@ const ROSTER_TEMPLATE_ROWS = [
     phone: '',
   },
   {
+    'student id': '8402650123160',
     'first name': 'Sam',
     'last name': 'Patel',
     subjects: 'reading',
@@ -224,7 +227,7 @@ const ROSTER_TEMPLATE_ROWS = [
 ];
 
 export function buildRosterTemplateCsv() {
-  const header = ['first name', 'last name', 'subjects', 'days', 'active', 'phone'];
+  const header = ['student id', 'first name', 'last name', 'subjects', 'days', 'active', 'phone'];
   const lines = [header.join(',')];
   for (const row of ROSTER_TEMPLATE_ROWS) {
     lines.push(header.map((key) => csvEscape(row[key])).join(','));
@@ -234,6 +237,7 @@ export function buildRosterTemplateCsv() {
 
 export function buildRosterTemplateXlsx() {
   const columns = [
+    { header: 'Student ID', key: 'student id' },
     { header: 'First Name', key: 'first name' },
     { header: 'Last Name', key: 'last name' },
     { header: 'Subjects', key: 'subjects' },
