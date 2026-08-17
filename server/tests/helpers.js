@@ -69,19 +69,17 @@ export async function insertStudent(centerId, {
   preferred_language = 'en',
   active = 1,
 } = {}) {
-  const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
   const result = await db
     .prepare(
       `INSERT INTO students
-         (center_id, first_name, last_name, qr_code_value, active, enrolled_subjects,
+         (center_id, first_name, last_name, active, enrolled_subjects,
           schedule_days, parent_phone, notify_channel, parent_whatsapp, preferred_language)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       centerId,
       first,
       last,
-      qr,
       active,
       subjects,
       days,
@@ -92,7 +90,6 @@ export async function insertStudent(centerId, {
     );
   return {
     id: result.lastInsertRowid,
-    qr,
     center_id: centerId,
     preferred_language,
     first_name: first,

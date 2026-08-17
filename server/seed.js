@@ -1,5 +1,4 @@
 import db, { sqlNow } from './db.js';
-import { v4 as uuidv4 } from 'uuid';
 import { splitFullName } from './utils/names.js';
 import { getDefaultCenter } from './services/centerService.js';
 
@@ -21,8 +20,8 @@ async function main() {
   }
 
   const insertStudent = db.prepare(
-    `INSERT INTO students (center_id, first_name, last_name, qr_code_value, registered_at)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO students (center_id, first_name, last_name, registered_at)
+     VALUES (?, ?, ?, ?)`
   );
 
   const existing = await db
@@ -36,13 +35,7 @@ async function main() {
   } else {
     for (const name of sampleStudents) {
       const { first_name, last_name } = splitFullName(name);
-      await insertStudent.run(
-        center.id,
-        first_name,
-        last_name,
-        `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`,
-        sqlNow()
-      );
+      await insertStudent.run(center.id, first_name, last_name, sqlNow());
     }
     console.log(`Seeded ${sampleStudents.length} students into center "${center.slug}".`);
   }

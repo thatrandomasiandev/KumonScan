@@ -6,12 +6,12 @@
     <title>KumonScan — attendance for Kumon centers, timed to the minute</title>
     <meta
       name="description"
-      content="KumonScan replaces the paper sign-in sheet at Kumon learning centers: desk and QR check-in, session timers against the 30/60-minute rule, overtime flags, absence lists, and CSV/PDF attendance reports."
+      content="KumonScan replaces the paper sign-in sheet at Kumon learning centers: staff-run desk check-in, session timers against the 30/60-minute rule, overtime flags, absence lists, and CSV/XLSX/PDF attendance reports."
     />
     <meta property="og:title" content="KumonScan" />
     <meta
       property="og:description"
-      content="Attendance for Kumon centers, timed to the minute. Desk and QR check-in, 30/60-minute session timers, overtime flags, and attendance reports."
+      content="Attendance for Kumon centers, timed to the minute. Staff-run desk check-in, 30/60-minute session timers, overtime flags, and attendance reports."
     />
     <meta property="og:type" content="website" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -55,9 +55,8 @@
           <div class="hero-copy">
             <h1>Attendance for Kumon centers, timed to the minute.</h1>
             <p class="lede">
-              KumonScan replaces the paper sign-in sheet. Staff check students in by name or QR
-              code, every session is timed against the 30/60-minute rule, and overtime turns red
-              at the front desk.
+              KumonScan replaces the paper sign-in sheet. Staff check students in from the front
+              desk, every session is timed against the 30/60-minute rule, and overtime turns red.
             </p>
             <div class="hero-ctas">
               <a class="btn btn-filled btn-large" href="#demo">Request a demo</a>
@@ -113,47 +112,40 @@
         </div>
       </section>
 
-      <!-- ======================= TWO WAYS IN ========================= -->
+      <!-- ======================= HOW IT WORKS ========================= -->
       <section class="section" id="how">
         <div class="container">
-          <h2 class="reveal">Two ways in. One record.</h2>
+          <h2 class="reveal">One roster. One record.</h2>
           <p class="section-lede reveal">
-            Some students carry their QR code, some do not, and the record has to hold up either
-            way. Both paths write the same timeapi.io-stamped session.
+            Every check-in is staff-run from the front desk, no kiosk, no student codes, so the
+            record never depends on a camera or a card someone forgot at home.
           </p>
           <div class="paths">
             <article class="path reveal">
               <h3>From the desk</h3>
               <p>
-                Staff search the roster by name, pick Math, Reading, or Both, and tap Check in.
-                The subject choice sets the allowance: 30 minutes for one subject, 60 for both.
-                Check-out is one tap on the same row.
+                Staff search the roster by name or student number, pick Math, Reading, or Both,
+                and tap Check in. The subject choice sets the allowance: 30 minutes for one
+                subject, 60 for both. Check-out is one tap on the same row.
               </p>
               <ol class="steps">
-                <li>Search the student's name</li>
+                <li>Search by name or student number</li>
                 <li>Pick Math, Reading, or Both</li>
                 <li>The timer starts on the floor list</li>
               </ol>
             </article>
             <article class="path reveal">
-              <h3>From the kiosk</h3>
+              <h3>Absences, automatically</h3>
               <p>
-                Students scan their own QR code on a shared tablet. The first scan of the day
-                checks them in; scanning again checks them out. Duplicate reads inside 3 seconds
-                are ignored, so an excited eight-year-old can't check in twice.
+                Staff set each student's enrolled subjects and scheduled weekdays once in Admin.
+                Desk then generates an absence list every day: everyone expected who never checked
+                in, no manual roll call.
               </p>
-              <div class="kiosk-frame" aria-hidden="true">
-                <svg viewBox="0 0 96 96" class="kiosk-qr">
-                  <path
-                    fill="currentColor"
-                    d="M12 12h28v28H12V12zm8 8v12h12V20H20zm36-8h28v28H56V12zm8 8v12h12V20H64zM12 56h28v28H12V56zm8 8v12h12V64H20zm42-8h6v6h-6v-6zm10 0h6v6h-6v-6zm-10 10h6v6h-6v-6zm10 10h6v6h-6v-6zm10-10h6v6h-6v-6zm0 10h6v16h-6V76zm-20 6h6v10h-6V82z"
-                  />
-                </svg>
-                <span class="kiosk-corner kiosk-corner-tl"></span>
-                <span class="kiosk-corner kiosk-corner-tr"></span>
-                <span class="kiosk-corner kiosk-corner-bl"></span>
-                <span class="kiosk-corner kiosk-corner-br"></span>
-              </div>
+              <ol class="steps">
+                <li>Set scheduled weekdays per student in Admin</li>
+                <li>Desk compares the schedule against today's check-ins</li>
+                <li>Anyone missing shows up on the absence list</li>
+              </ol>
             </article>
           </div>
         </div>
@@ -257,8 +249,9 @@
             <div class="ledger-row reveal">
               <dt>Admin access control</dt>
               <dd>
-                Staff pages sit behind a password with httpOnly session cookies and rate-limited
-                login. The kiosk stays open for students; the records do not.
+                Every staff page sits behind httpOnly session cookies and rate-limited login.
+                Individual staff logins carry manager or front-desk permissions, so payroll and
+                roster changes stay manager-only.
               </dd>
             </div>
           </dl>

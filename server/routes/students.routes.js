@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import db, { sqlNow } from '../db.js';
 import {
   getCenterTimezone,
@@ -137,16 +136,15 @@ router.post('/students', requireAdmin, async (req, res) => {
   }
 
   const enrolled_subjects = normalizeSubjects(rawEnrolled) || 'both';
-  const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
 
   const studentId = await insertStudentWithNumber(req.center.id, async (tx, studentNumber) => {
     const result = await tx
       .prepare(
         `INSERT INTO students
-           (center_id, first_name, last_name, qr_code_value, enrolled_subjects, registered_at, student_number)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+           (center_id, first_name, last_name, enrolled_subjects, registered_at, student_number)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(req.center.id, first_name, last_name, qr_code_value, enrolled_subjects, sqlNow(), studentNumber);
+      .run(req.center.id, first_name, last_name, enrolled_subjects, sqlNow(), studentNumber);
     return result.lastInsertRowid;
   });
 

@@ -68,13 +68,12 @@ describe('Full data export', () => {
     const runId = uuidv4().slice(0, 8);
 
     // Name with comma and quote exercises the CSV escaping path end to end.
-    const qr = `KUMON-${runId.toUpperCase()}`;
     const studentResult = await db
       .prepare(
-        `INSERT INTO students (center_id, first_name, last_name, qr_code_value, active, parent_phone)
-         VALUES (?, ?, ?, ?, 1, ?)`
+        `INSERT INTO students (center_id, first_name, last_name, active, parent_phone)
+         VALUES (?, ?, ?, 1, ?)`
       )
-      .run(center.id, `Comma, ${runId}`, 'Says "Hi"', qr, '+12135550100');
+      .run(center.id, `Comma, ${runId}`, 'Says "Hi"', '+12135550100');
     const studentId = studentResult.lastInsertRowid;
 
     const checkInTime = '2031-01-15T19:07:00.000Z';

@@ -36,12 +36,6 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  scan: (qr_code_value, { force = false, subjects } = {}) =>
-    request('/scan', {
-      method: 'POST',
-      body: JSON.stringify({ qr_code_value, force, subjects }),
-    }),
-
   checkIn: (student_id, subjects, { mode = 'in_person' } = {}) =>
     request('/check-in', {
       method: 'POST',
@@ -59,8 +53,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ first_name, last_name, preferred_language }),
     }),
-
-  searchStudents: (q) => request(`/search?q=${encodeURIComponent(q)}`),
 
   getSystemStatus: () => request('/status'),
 
@@ -285,8 +277,6 @@ export const api = {
   },
 
   getDashboard: () => request('/dashboard'),
-
-  getTime: () => request('/time'),
 
   getAuthStatus: () => request('/auth/status'),
 

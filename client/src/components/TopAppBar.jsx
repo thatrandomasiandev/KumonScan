@@ -19,19 +19,17 @@ export default function TopAppBar({ scrolled = false, centerSlug }) {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPage = pagePath(location.pathname);
-  const isScanPage = currentPage === '/';
 
   return (
     <AppBar
       position="sticky"
       elevation={0}
       sx={{
-        bgcolor: isScanPage ? 'transparent' : getElevatedSurface(2),
+        bgcolor: getElevatedSurface(2),
         color: md3Colors.onSurface,
         boxShadow: scrolled ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
-        borderBottom: isScanPage ? 'none' : `1px solid ${md3Colors.outlineVariant}`,
+        borderBottom: `1px solid ${md3Colors.outlineVariant}`,
         transition: `box-shadow ${motion.medium1} ${motion.emphasizedDecelerate}`,
-        backgroundImage: isScanPage ? 'none' : undefined,
         top: 0,
       }}
     >
@@ -50,7 +48,7 @@ export default function TopAppBar({ scrolled = false, centerSlug }) {
             justifyContent: isMobile ? 'center' : 'flex-start',
           }}
         >
-          <BrandMark compact variant={isScanPage ? 'onDark' : 'light'} />
+          <BrandMark compact variant="light" />
         </Box>
 
         {!isMobile && <Box sx={{ flex: 1 }} />}

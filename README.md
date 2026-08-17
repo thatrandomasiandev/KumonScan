@@ -1,13 +1,13 @@
 # KumonScan
 
-QR attendance for Kumon learning centers: per-student codes, kiosk check-in/out, staff dashboard.
+Desk-operated attendance for Kumon learning centers: staff-run check-in/out, self-registration, staff dashboard.
 
 ## Features
 
-- **QR scanning:** device-camera check-in/out via html5-qrcode
-- **Server time:** timestamps from timeapi.io only; client clock ignored; scan rejected if timeapi.io is unreachable
+- **Desk check-in:** staff search the roster by name or student number, pick Math / Reading / Both, check in/out — no kiosk, no student codes, no camera
+- **Server time:** timestamps from timeapi.io only; client clock ignored; check-in/out rejected if timeapi.io is unreachable
 - **Dashboard:** per-student stats, session history, 30-day charts (Recharts)
-- **Admin:** add students, generate and download QR codes, deactivate accounts
+- **Admin:** add students, manage the roster (CSV/XLSX import and export), deactivate accounts
 
 ## Tech Stack
 
@@ -16,8 +16,6 @@ QR attendance for Kumon learning centers: per-student codes, kiosk check-in/out,
 | Frontend | React + Vite + Material Design 3 (MUI) |
 | Backend  | Express.js (Node)                   |
 | Database | Neon Postgres (`@neondatabase/serverless`) |
-| QR Scan  | html5-qrcode                        |
-| QR Gen   | qrcode npm package                  |
 | Charts   | Recharts                            |
 | Time     | timeapi.io REST API                 |
 
@@ -82,7 +80,7 @@ NODE_ENV=production
 
 Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `ALLOWED_ORIGINS` only for cross-origin admin clients.
 
-In production, admin routes return 503 if `ADMIN_PASSWORD` is unset (auth fails closed). JSON bodies are capped at 256kb except `/api/admin/roster-import` (8mb). `/api/scan` is rate-limited to 60 requests per minute per IP.
+In production, admin routes return 503 if `ADMIN_PASSWORD` is unset (auth fails closed). JSON bodies are capped at 256kb except `/api/admin/roster-import` (8mb). `/api/register` is rate-limited to 10 requests per minute per IP.
 
 ## CI
 
@@ -114,24 +112,24 @@ Setup requires four env vars (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID
 
 | Route        | Description                                                      |
 | ------------ | ---------------------------------------------------------------- |
-| `/`          | Full-screen QR scanner with live clock                           |
-| `/desk`      | Front-desk name check-in, subject selection, timers, check-out   |
+| `/`          | Redirects to `/desk`                                             |
+| `/desk`      | Front-desk name/number check-in, subject selection, timers, check-out |
 | `/dashboard` | Analytics table + session charts                                 |
-| `/admin`     | Student + staff management, QR codes, capacity, payroll          |
+| `/admin`     | Student + staff management, roster import/export, capacity, payroll |
 
 ## API Endpoints
 
 | Method | Path                           | Description                                      |
 | ------ | ------------------------------ | ------------------------------------------------ |
-| POST   | `/api/scan`                    | Check in/out via QR code                         |
 | POST   | `/api/check-in`                | Staff desk check-in (student_id + subjects)      |
 | POST   | `/api/check-out`               | Staff desk check-out (student_id or session_id)  |
 | GET    | `/api/present`                 | Open sessions with elapsed time and overtime     |
 | GET    | `/api/absent`                  | Scheduled today but never checked in             |
-| GET    | `/api/reports/attendance`      | Monthly/annual attendance JSON, CSV, or PDF      |
+| GET    | `/api/reports/attendance`      | Monthly/annual attendance JSON, CSV, XLSX, or PDF |
 | GET    | `/api/students`                | List students with stats                         |
 | GET    | `/api/students/:id/sessions`   | Session history for a student                    |
-| POST   | `/api/students`                | Create student + QR code value                   |
+| PATCH  | `/api/students/:id/sessions/:sessionId` | Correct a mistaken check-in/out time    |
+| POST   | `/api/students`                | Create student (assigns a student number)        |
 | POST   | `/api/admin/roster-import`     | Admin CRM TSV/CSV roster upload                  |
 | POST   | `/api/admin/schedule-bulk`     | Bulk-set schedule days (missing or all active)   |
 | GET    | `/api/staff`                   | List staff with on-duty status                   |
@@ -143,7 +141,7 @@ Setup requires four env vars (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID
 | GET    | `/api/reports/utilization`     | Avg check-ins per weekday vs schedule + capacity |
 | GET    | `/api/admin/capacity`          | Weekday seat limits                              |
 | PUT    | `/api/admin/capacity`          | Set weekday seat limits                          |
-| PATCH  | `/api/students/:id/deactivate` | Deactivate a student                             |
+| PATCH  | `/api/students/:id/deactivate` | Deactivate a student (manager only)              |
 | GET    | `/api/dashboard`               | Dashboard summary + charts                       |
 | GET    | `/api/time`                    | Current server-sourced time                      |
 | GET    | `/api/gateway/pending`         | Gateway phone claims queued SMS (bearer key)     |
@@ -158,10 +156,9 @@ Setup requires four env vars (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID
 
 ## Check-In / Check-Out Logic
 
-1. **Desk:** staff picks a roster name, selects Math / Reading / Both, then checks in. Allowance is 30 minutes for one subject and 60 minutes for both. Overtime rows turn red and show `+N min`.
-2. **QR kiosk:** first scan of the day checks in (subjects default to the student's enrolled subjects, or both); second scan while checked in checks out.
-3. timeapi.io unreachable or slow (>5s): check-in/out rejected with error (no session written)
-4. QR duplicate read within 3 seconds: ignored (`SCAN_DEDUP_SECONDS`)
+1. **Desk:** staff picks a roster name (or types a student number), selects Math / Reading / Both, then checks in. Allowance is 30 minutes for one subject and 60 minutes for both. Overtime rows turn red and show `+N min`.
+2. timeapi.io unreachable or slow (>5s): check-in/out rejected with error (no session written)
+3. A mistaken check-in/out time can be corrected afterward from a student's session history in Admin.
 
 ## Auth
 

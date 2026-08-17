@@ -11,7 +11,7 @@ KumonScan documentation, product notes, and portfolio narratives must meet the s
 ## Voice
 
 - **Product docs (`PRODUCT.md`, `README.md`):** declarative third person or imperative. State what the system does, not what it "aims to" do.
-- **Portfolio / GCSP / highlight copy:** first person singular ("I built," "I block scans when"). Never passive on your contributions.
+- **Portfolio / GCSP / highlight copy:** first person singular ("I built," "I reject check-ins when"). Never passive on your contributions.
 - Name assumptions precisely: e.g., "timestamps come from timeapi.io" not "trustworthy time."
 - Terse by default. Expand only when specifying a constraint, metric, or failure mode.
 
@@ -19,7 +19,7 @@ KumonScan documentation, product notes, and portfolio narratives must meet the s
 
 - Every sentence must: state a fact, define a term, cite evidence, state a claim, or connect two ideas. Otherwise delete it.
 - No throat-clearing ("It is important to note," "In today's centers," "This product provides").
-- Concrete over abstract: "3-second deduplication window" beats "prevents duplicate scans"; "10 requests/minute on `/api/register`" beats "rate-limited registration."
+- Concrete over abstract: "30 minutes for one subject, 60 for both" beats "reasonable session allowance"; "10 requests/minute on `/api/register`" beats "rate-limited registration."
 - No significance inflation ("critical challenge," "key innovation," "trusted solution"). State the mechanism.
 
 ## Paragraph-Level Rules
@@ -33,16 +33,16 @@ KumonScan documentation, product notes, and portfolio narratives must meet the s
 - "Success means…" without a measurable criterion.
 - "Without friction," "seamless experience," "trusted records" (name the mechanism instead).
 - Em dashes in prose (use commas, periods, or parentheses).
-- Sentences that could describe any attendance app. Every claim must be specific to KumonScan (timeapi.io, 3s dedup, 7-day regulars threshold, Material Design 3 kiosk, etc.).
+- Sentences that could describe any attendance app. Every claim must be specific to KumonScan (timeapi.io, 30/60-minute session allowance, 7-day regulars threshold, desk-only check-in, etc.).
 
 ## Numbers to Use When Relevant
 
-- Scan deduplication: 3 seconds (`SCAN_DEDUP_SECONDS`)
+- Session allowance: 30 minutes (one subject), 60 minutes (both)
 - Registration rate limit: 10 requests per minute
 - Regulars threshold: 3+ visits in 7 days
 - Dashboard charts: 30-day window
 - Student touch targets: 44px minimum
-- Time source: timeapi.io (scan blocked if unreachable)
+- Time source: timeapi.io (check-in/out blocked if unreachable)
 
 ## Tables and Lists
 

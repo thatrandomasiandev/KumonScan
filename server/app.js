@@ -67,8 +67,8 @@ export function createApp() {
   slugScoped.use(apiRoutes);
   app.use('/api/c/:centerSlug', slugScoped);
 
-  // Legacy unslugged paths resolve to the original center so existing kiosk
-  // URLs, the gateway phone, and configured webhooks keep working.
+  // Legacy unslugged paths resolve to the original center so existing
+  // bookmarked URLs, the gateway phone, and configured webhooks keep working.
   const defaultScoped = Router();
   defaultScoped.use(resolveDefaultCenter);
   defaultScoped.use(apiRoutes);

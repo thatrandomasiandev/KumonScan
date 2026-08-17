@@ -241,14 +241,6 @@ describe('multi-center tenancy', () => {
     expect(checkOut.status).toBe(404);
   });
 
-  it('kiosk scan for a QR belonging to another center returns 404', async () => {
-    const res = await request(app)
-      .post(`/api/c/${centerA.slug}/scan`)
-      .set('X-Forwarded-For', '198.51.100.56')
-      .send({ qr_code_value: studentB.qr });
-    expect(res.status).toBe(404);
-  });
-
   it('POST /api/centers provisions an isolated center (superadmin)', async () => {
     process.env.SUPERADMIN_KEY = 'test-superadmin-key';
     const slug = `prov-${Date.now()}`;

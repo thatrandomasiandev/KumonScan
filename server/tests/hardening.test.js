@@ -65,9 +65,9 @@ describe('body size limits', () => {
   it('rejects large payloads on normal routes (256kb global limit)', async () => {
     const big = 'x'.repeat(300 * 1024);
     const res = await request(app)
-      .post('/api/scan')
+      .post('/api/register')
       .set('X-Forwarded-For', '198.51.100.60')
-      .send({ qr_code_value: big });
+      .send({ first_name: big, last_name: 'Big' });
     expect(res.status).toBe(413);
   });
 
@@ -97,15 +97,15 @@ describe('body size limits', () => {
   });
 });
 
-describe('/api/scan rate limit', () => {
-  it('returns 429 after 60 scans in a minute from one IP', async () => {
+describe('/api/register rate limit', () => {
+  it('returns 429 after 10 registration attempts in a minute from one IP', async () => {
     const ip = '198.51.100.70';
     let lastStatus = 0;
-    for (let i = 0; i < 61; i++) {
+    for (let i = 0; i < 11; i++) {
       const res = await request(app)
-        .post('/api/scan')
+        .post('/api/register')
         .set('X-Forwarded-For', ip)
-        .send({});
+        .send({ first_name: 'Rate', last_name: 'Limit' });
       lastStatus = res.status;
     }
     expect(lastStatus).toBe(429);

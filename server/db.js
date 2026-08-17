@@ -329,7 +329,7 @@ async function migrateTenancy() {
       ON staff (center_id, LOWER(first_name), LOWER(last_name))
   `);
 
-  // Per-center sequential "student number" for kiosk name/number search.
+  // Per-center sequential "student number" for desk name/number search.
   // Idempotent: only rows still missing a number get one, continuing after
   // that center's current max — safe to rerun on every boot.
   await exec(`
@@ -360,7 +360,6 @@ async function migrateStudentsTable() {
         center_id INTEGER NOT NULL REFERENCES centers(id),
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
-        qr_code_value TEXT NOT NULL UNIQUE,
         active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
         registered_at TEXT NOT NULL DEFAULT TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
@@ -454,6 +453,13 @@ async function migrateStudentsTable() {
   }
   if (!cols.includes('student_number')) {
     await exec(`ALTER TABLE students ADD COLUMN student_number INTEGER`);
+  }
+  // QR check-in removed 2026-08-16: check-in is desk-only now, and the
+  // codes are worthless without a scanner reading them. Drop, don't just
+  // stop writing to it — it was NOT NULL UNIQUE, so leaving it in place
+  // would break every insert that no longer supplies a value.
+  if (cols.includes('qr_code_value')) {
+    await exec(`ALTER TABLE students DROP COLUMN qr_code_value`);
   }
 }
 

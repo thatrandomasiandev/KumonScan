@@ -30,7 +30,7 @@ export async function getCenterBySlug(slug) {
 
 /**
  * The original, pre-multi-tenant center. Legacy unslugged /api/... requests
- * (existing kiosk bookmarks, the gateway phone, configured webhook URLs)
+ * (existing bookmarked URLs, the gateway phone, configured webhook URLs)
  * resolve here, so the live center keeps working unchanged.
  */
 export async function getDefaultCenter() {

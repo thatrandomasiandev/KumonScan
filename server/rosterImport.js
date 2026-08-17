@@ -1,6 +1,5 @@
 import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
-import { v4 as uuidv4 } from 'uuid';
 import { sqlNow, withRealTransaction } from './db.js';
 import { normalizeName, validateNameField } from './utils/names.js';
 import { normalizeSubjects } from './sessionRules.js';
@@ -287,8 +286,8 @@ export async function importRosterFromContent(
     );
     const insertStudent = tx.prepare(
       `INSERT INTO students
-         (center_id, first_name, last_name, qr_code_value, active, enrolled_subjects, schedule_days, parent_phone, registered_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (center_id, first_name, last_name, active, enrolled_subjects, schedule_days, parent_phone, registered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     const touchedIds = [];
@@ -314,12 +313,10 @@ export async function importRosterFromContent(
         summary.updated++;
         touchedIds.push(existing.id);
       } else {
-        const qr_code_value = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
         const inserted = await insertStudent.run(
           centerId,
           row.first_name,
           row.last_name,
-          qr_code_value,
           row.active,
           row.enrolled_subjects,
           row.schedule_days,

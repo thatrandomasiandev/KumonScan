@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Box } from '@mui/material';
 import TopAppBar from './TopAppBar';
 import NavigationRail from './NavigationRail';
 import BottomNav from './BottomNav';
 import { md3Colors } from '../theme';
-import { pagePath } from '../centerPath';
 
 export default function Layout({ children }) {
-  const location = useLocation();
   const { centerSlug } = useParams();
-  const isScanPage = pagePath(location.pathname) === '/';
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -30,10 +27,10 @@ export default function Layout({ children }) {
         pt: 'env(safe-area-inset-top)',
       }}
     >
-      {!isScanPage && <NavigationRail centerSlug={centerSlug} />}
+      <NavigationRail centerSlug={centerSlug} />
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {!isScanPage && <TopAppBar scrolled={scrolled} centerSlug={centerSlug} />}
+        <TopAppBar scrolled={scrolled} centerSlug={centerSlug} />
 
         <Box
           component="main"
@@ -43,11 +40,9 @@ export default function Layout({ children }) {
               xs: 'calc(72px + env(safe-area-inset-bottom))',
               md: 0,
             },
-            overflow: isScanPage ? 'auto' : 'visible',
+            overflow: 'visible',
             WebkitOverflowScrolling: 'touch',
-            display: isScanPage ? 'flex' : 'block',
-            flexDirection: isScanPage ? 'column' : 'initial',
-            minHeight: isScanPage ? 0 : 'auto',
+            display: 'block',
             animation: 'pageEnter 300ms cubic-bezier(0.05, 0.7, 0.1, 1.0)',
             '@keyframes pageEnter': {
               from: { opacity: 0 },

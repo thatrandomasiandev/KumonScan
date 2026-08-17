@@ -597,14 +597,15 @@ export default function DeskPage() {
               (s) =>
                 s.first_name.toLowerCase().includes(q) ||
                 s.last_name.toLowerCase().includes(q) ||
-                s.name.toLowerCase().includes(q)
+                s.name.toLowerCase().includes(q) ||
+                String(s.student_number ?? '').includes(q)
             );
           }}
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Student name"
-              placeholder="Search first or last name"
+              label="Student name or number"
+              placeholder="Search first or last name, or student number"
               autoFocus
             />
           )}

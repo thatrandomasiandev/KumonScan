@@ -1,6 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Typography } from '@mui/material';
-import QrCodeScannerOutlinedIcon from '@mui/icons-material/QrCodeScannerOutlined';
 import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -12,7 +11,6 @@ import { md3Colors, getElevatedSurface, shape } from '../theme';
 import { centerPath, pagePath } from '../centerPath';
 
 const railItems = [
-  { path: '/', label: 'Scan', icon: QrCodeScannerOutlinedIcon },
   { path: '/desk', label: 'Desk', icon: DeskOutlinedIcon },
   { path: '/register', label: 'Register', icon: PersonAddOutlinedIcon },
   { path: '/dashboard', label: 'Dashboard', icon: BarChartOutlinedIcon },

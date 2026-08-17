@@ -1,5 +1,4 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
-import QRCode from 'qrcode';
 import {
   Box,
   Typography,
@@ -30,7 +29,6 @@ import {
   FormControlLabel,
 } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
-import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
@@ -288,107 +286,6 @@ function CurrentlyHere({ present, timezone }) {
         )}
       </Box>
     </Paper>
-  );
-}
-
-function QRDisplay({ student, onClose }) {
-  const [qrDataUrl, setQrDataUrl] = useState(null);
-
-  useEffect(() => {
-    QRCode.toDataURL(student.qr_code_value, {
-      width: 512,
-      margin: 2,
-      color: { dark: '#1B6EF3', light: '#ffffff' },
-    }).then(setQrDataUrl);
-  }, [student.qr_code_value]);
-
-  function downloadQR() {
-    const link = document.createElement('a');
-    link.download = `${student.name.replace(/\s+/g, '_')}_QR.png`;
-    link.href = qrDataUrl;
-    link.click();
-  }
-
-  return (
-    <>
-      <Box
-        onClick={onClose}
-        sx={{ position: 'fixed', inset: 0, bgcolor: md3Colors.scrim, zIndex: 1200 }}
-      />
-      <Paper
-        elevation={0}
-        sx={{
-          position: 'fixed',
-          top: { xs: 'auto', sm: '50%' },
-          bottom: { xs: 0, sm: 'auto' },
-          left: '50%',
-          transform: { xs: 'translateX(-50%)', sm: 'translate(-50%, -50%)' },
-          zIndex: 1300,
-          maxWidth: 400,
-          width: { xs: '100%', sm: 'calc(100% - 32px)' },
-          maxHeight: { xs: '90dvh', sm: 'none' },
-          overflow: 'auto',
-          p: { xs: 2.5, sm: 3 },
-          pb: { xs: 'max(24px, env(safe-area-inset-bottom))', sm: 3 },
-          borderRadius: {
-            xs: `${shape.extraLarge}px ${shape.extraLarge}px 0 0`,
-            sm: `${shape.extraLarge}px`,
-          },
-          bgcolor: getElevatedSurface(4),
-          boxShadow: '0 4px 32px rgba(0,0,0,0.12)',
-          textAlign: 'center',
-        }}
-      >
-        <Typography variant="headlineSmall" sx={{ mb: 0.5 }}>
-          {student.name}
-        </Typography>
-        <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 2, fontFamily: 'monospace' }}>
-          {student.qr_code_value}
-        </Typography>
-        <Box
-          sx={{
-            bgcolor: md3Colors.primaryContainer,
-            borderRadius: `${shape.large}px`,
-            p: { xs: 1.5, sm: 2 },
-            display: 'inline-block',
-            mb: 3,
-            maxWidth: '100%',
-          }}
-        >
-          {qrDataUrl ? (
-            <Box
-              component="img"
-              src={qrDataUrl}
-              alt={`QR code for ${student.name}`}
-              sx={{
-                width: '100%',
-                maxWidth: 256,
-                height: 'auto',
-                aspectRatio: '1 / 1',
-                display: 'block',
-              }}
-            />
-          ) : (
-            <Box
-              sx={{
-                width: 'min(256px, 70vw)',
-                aspectRatio: '1 / 1',
-                bgcolor: md3Colors.surfaceVariant,
-                borderRadius: `${shape.small}px`,
-              }}
-            />
-          )}
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
-          <Button variant="contained" fullWidth onClick={downloadQR} disabled={!qrDataUrl}>
-            Download
-          </Button>
-          <Button variant="text" fullWidth onClick={onClose}>
-            Close
-          </Button>
-        </Box>
-      </Paper>
-    </>
   );
 }
 
@@ -893,7 +790,6 @@ export default function AdminPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [newStudent, setNewStudent] = useState(null);
-  const [qrStudent, setQrStudent] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -941,7 +837,7 @@ export default function AdminPage() {
         student.name.toLowerCase().includes(q) ||
         student.first_name?.toLowerCase().includes(q) ||
         student.last_name?.toLowerCase().includes(q) ||
-        student.qr_code_value?.toLowerCase().includes(q)
+        String(student.student_number ?? '').includes(q)
       );
     });
   }, [students, rosterQuery, showInactive]);
@@ -972,7 +868,6 @@ export default function AdminPage() {
     try {
       const student = await api.createStudent(firstName.trim(), lastName.trim());
       setNewStudent(student);
-      setQrStudent(student);
       setSelectedStudent(student);
       setFirstName('');
       setLastName('');
@@ -1081,7 +976,7 @@ export default function AdminPage() {
 
   return (
     <Box sx={{ maxWidth: 1280, mx: 'auto', px: 2, py: 4, pb: { xs: 12, md: 4 }, position: 'relative' }}>
-      <PageHeader title="Admin" subtitle="Manage students, staff, QR codes, and live attendance" />
+      <PageHeader title="Admin" subtitle="Manage students, staff, and live attendance" />
 
       <Tabs
         value={activeTab}
@@ -1166,7 +1061,7 @@ export default function AdminPage() {
               value={rosterQuery}
               onChange={(e) => setRosterQuery(e.target.value)}
               onKeyDown={handleRosterSearchKeyDown}
-              placeholder="Search name or QR code"
+              placeholder="Search name or student number"
               fullWidth
               size="small"
               autoFocus
@@ -1230,8 +1125,8 @@ export default function AdminPage() {
                 <ListItemText
                   primary={student.name}
                   secondary={
-                    <Typography variant="bodySmall" sx={{ fontFamily: 'monospace', color: md3Colors.onSurfaceVariant }} noWrap>
-                      {student.qr_code_value}
+                    <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }} noWrap>
+                      {student.student_number ? `#${student.student_number}` : ''}
                       {!student.active ? ' · inactive' : ''}
                     </Typography>
                   }
@@ -1467,21 +1362,6 @@ export default function AdminPage() {
                   fullWidth
                 />
 
-                <Box
-                  sx={{
-                    border: `2px dashed ${md3Colors.outlineVariant}`,
-                    borderRadius: `${shape.large}px`,
-                    p: 4,
-                    textAlign: 'center',
-                    bgcolor: md3Colors.surface,
-                  }}
-                >
-                  <QrCode2OutlinedIcon sx={{ fontSize: 48, color: md3Colors.onSurfaceVariant, mb: 1 }} />
-                  <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
-                    Preview will appear here
-                  </Typography>
-                </Box>
-
                 <Button type="submit" variant="contained" disabled={submitting}>
                   {submitting ? 'Adding...' : 'Add Student'}
                 </Button>
@@ -1489,7 +1369,7 @@ export default function AdminPage() {
 
               {newStudent && (
                 <Typography variant="bodyMedium" sx={{ color: md3Colors.primary, mt: 2 }}>
-                  {newStudent.name} added — QR code shown below
+                  {newStudent.name} added to the roster
                 </Typography>
               )}
             </Paper>
@@ -1521,9 +1401,11 @@ export default function AdminPage() {
                 <StudentInitials name={selectedStudent.name} />
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="titleLarge">{selectedStudent.name}</Typography>
-                  <Typography variant="bodySmall" sx={{ fontFamily: 'monospace', color: md3Colors.onSurfaceVariant }}>
-                    {selectedStudent.qr_code_value}
-                  </Typography>
+                  {selectedStudent.student_number && (
+                    <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+                      {`Student #${selectedStudent.student_number}`}
+                    </Typography>
+                  )}
                 </Box>
                 {!selectedStudent.active && (
                   <Chip label="Inactive" size="small" variant="outlined" />
@@ -1535,13 +1417,6 @@ export default function AdminPage() {
               <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                 {selectedStudent.active && (
                   <>
-                    <Button
-                      variant="contained"
-                      onClick={() => setQrStudent(selectedStudent)}
-                      sx={{ bgcolor: md3Colors.primaryContainer, color: md3Colors.onPrimaryContainer, '&:hover': { bgcolor: md3Colors.primaryContainer } }}
-                    >
-                      View QR Code
-                    </Button>
                     <Button
                       variant="outlined"
                       onClick={() => setDeactivateTarget(selectedStudent)}
@@ -1636,7 +1511,7 @@ export default function AdminPage() {
         <DialogTitle>Deactivate student?</DialogTitle>
         <DialogContent>
           <Typography variant="bodyMedium">
-            Deactivate {deactivateTarget?.name}? Their QR code will no longer work.
+            Deactivate {deactivateTarget?.name}? They'll no longer be checked in at Desk.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1652,8 +1527,6 @@ export default function AdminPage() {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {qrStudent && <QRDisplay student={qrStudent} onClose={() => setQrStudent(null)} />}
     </Box>
   );
 }

@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Navigate, Routes, Route, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
-import ScanPage from './pages/ScanPage';
 import DeskPage from './pages/DeskPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
@@ -38,7 +37,7 @@ function CenterRoutes() {
           element={
             <Layout>
               <Routes>
-                <Route index element={<ScanPage />} />
+                <Route index element={<Navigate to="desk" replace />} />
                 <Route
                   path="desk"
                   element={

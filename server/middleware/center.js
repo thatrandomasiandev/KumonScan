@@ -31,7 +31,7 @@ export async function resolveCenterFromSlug(req, res, next) {
 
 /**
  * Legacy unslugged /api/... — resolves to the original center so existing
- * kiosk URLs, the gateway phone, and configured webhook endpoints keep
+ * bookmarked URLs, the gateway phone, and configured webhook endpoints keep
  * working unchanged after the migration.
  */
 export async function resolveDefaultCenter(req, res, next) {

@@ -1,6 +1,6 @@
 # Parent-Facing i18n
 
-Scope: parent-facing surfaces only (registration today; booking and the marketing site when they ship). Staff tools (`DeskPage`, `AdminPage`, `DashboardPage`, `ScanPage`) stay English and must not import `useTranslation`.
+Scope: parent-facing surfaces only (registration today; booking and the marketing site when they ship). Staff tools (`DeskPage`, `AdminPage`, `DashboardPage`) stay English and must not import `useTranslation`.
 
 ## Adding a language (no code changes)
 
