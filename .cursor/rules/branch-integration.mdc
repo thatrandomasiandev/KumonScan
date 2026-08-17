@@ -1,0 +1,63 @@
+---
+description: Mandatory workflow for merging pre-existing feature branches (agent-*) into main. Every merge so far has surfaced a real cross-tenant scoping bug once integrated with the multi-tenant retrofit; assume the next one will too.
+alwaysApply: true
+---
+
+# Branch Integration Protocol
+
+Repo: KumonScan (Node/Express + Postgres backend via Neon, React/Vite/MUI frontend).
+Multi-tenant: every table is scoped by `center_id`; requests resolve `req.center`
+via slug (`/api/c/:slug/...`) or default (`/api/...`). All feature routers are
+aggregated in `server/routes/index.js` and mounted twice in `server/app.js`
+(slugScoped + defaultScoped) — never mount a new router directly in `app.js`.
+
+We integrate a backlog of pre-existing feature branches (built by separate
+agents in parallel worktrees, each unaware of the others) onto `main` via
+`git merge --no-commit --no-ff <branch>`, one at a time. Pattern so far,
+without exception: every branch was written against an OLDER version of
+`main` and/or without knowledge of the multi-tenant retrofit, so integration
+has found a REAL bug in every single merge — usually a query with no
+`center_id` filter (cross-tenant data leak: one center's staff could read or
+trigger actions for another center's data). Assume this will happen again.
+After resolving mechanical merge conflicts, explicitly audit every new or
+changed query in the branch for a missing `center_id` / `req.center.id`
+filter before considering the merge done.
+
+Also check: does the branch add a new table with a FK to `students(id)` or
+`sessions(id)` with no `ON DELETE CASCADE`? If so, add it to
+`wipeCenterData`'s explicit child-table cleanup in `server/tests/helpers.js`
+(dependency order: grandchildren before children before students), or the
+shared test suite will break for every other test file that shares the Neon
+test branch.
+
+## Verification workflow for each merge
+
+1. `git merge --no-commit --no-ff <branch>`
+2. Resolve conflicts. Read both sides fully before choosing — usually both
+   sides' logic needs to survive (branches predate features `main` already has).
+3. Audit new/changed queries for `center_id` scoping (see above).
+4. `cd client && npm run build` — must pass clean.
+5. `cd server && npx vitest run` — run the FULL suite (not just the new
+   branch's test file), since a shared Neon test-branch means one file's
+   bug can cascade into unrelated files. A single "socket hang up" or
+   "fetch failed" `NeonDbError` is a transient network blip — re-run just
+   that file in isolation to confirm before treating it as real. Any other
+   failure is real; fix it, don't ignore it.
+6. Watch for stale test assumptions: a branch's own test suite may assert
+   "when feature X doesn't exist" (e.g., "no delivery channel installed")
+   — if X now exists on `main` (because a sibling branch already merged
+   it), that assumption is false post-merge and the test needs rewriting
+   to match real integrated behavior, not the code.
+7. `git add` each changed file EXPLICITLY by name (not `-A`). Double check
+   with `git status` after adding that everything shows fully staged (no
+   trailing `M` after an `A` — that means an edit didn't get staged; this
+   has bitten this repo once already). If any `git add` command errors on
+   a bad pathspec, the WHOLE command may silently fail to stage anything —
+   verify with `git status` immediately after every `git add`.
+8. Commit with a message explaining what conflicts were resolved and how,
+   and any real bugs found/fixed during integration (not just "merged X").
+9. Update `.agent-coordination/status.md` (gitignored, not committed): mark
+   the branch's row "merged to main (commit `<hash>`)".
+
+Stripe billing (`agent-billing`) is explicitly excluded from all
+integration — do not merge it, do not reference it as pending.
