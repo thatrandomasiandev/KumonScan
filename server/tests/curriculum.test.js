@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { v4 as uuidv4 } from 'uuid';
 import app from '../app.js';
 import db from '../db.js';
 import { clearAdminSessionsForTests } from '../middleware/auth.js';
@@ -67,22 +66,21 @@ async function getTenancyContext() {
 }
 
 async function insertStudent({ first, last }) {
-  const qr = `KUMON-${uuidv4().slice(0, 8).toUpperCase()}`;
   const { studentsHaveCenter, centerId } = await getTenancyContext();
   const result = studentsHaveCenter
     ? await db
         .prepare(
-          `INSERT INTO students (center_id, first_name, last_name, qr_code_value, active)
-           VALUES (?, ?, ?, ?, 1)`
-        )
-        .run(centerId, first, last, qr)
-    : await db
-        .prepare(
-          `INSERT INTO students (first_name, last_name, qr_code_value, active)
+          `INSERT INTO students (center_id, first_name, last_name, active)
            VALUES (?, ?, ?, 1)`
         )
-        .run(first, last, qr);
-  return { id: result.lastInsertRowid, qr };
+        .run(centerId, first, last)
+    : await db
+        .prepare(
+          `INSERT INTO students (first_name, last_name, active)
+           VALUES (?, ?, 1)`
+        )
+        .run(first, last);
+  return { id: result.lastInsertRowid };
 }
 
 async function insertSession(studentId) {

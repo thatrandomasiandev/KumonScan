@@ -307,8 +307,12 @@ export async function logCompletion(
  * timeapi.io local ISO (no zone suffix) or a UTC fallback; epoch comparison
  * handles both, matching how the attendance report filters sessions.
  */
-export async function getProgressPace({ weeks = 4 } = {}) {
+export async function getProgressPace({ centerId, weeks = 4 } = {}) {
   await ensureCurriculumSchema();
+
+  if (!Number.isInteger(centerId) || centerId < 1) {
+    throw new CurriculumError('centerId is required', 500);
+  }
 
   const parsedWeeks = Number(weeks);
   if (!Number.isInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 26) {
@@ -320,17 +324,19 @@ export async function getProgressPace({ weeks = 4 } = {}) {
   const students = await db
     .prepare(
       `SELECT id, first_name, last_name FROM students
-       WHERE active = 1 ORDER BY first_name ASC, last_name ASC`
+       WHERE active = 1 AND center_id = ? ORDER BY first_name ASC, last_name ASC`
     )
-    .all();
+    .all(centerId);
 
   const completions = await db
     .prepare(
       `SELECT wc.student_id, wc.completed_at, cl.subject
        FROM worksheet_completions wc
-       JOIN curriculum_levels cl ON cl.id = wc.level_id`
+       JOIN curriculum_levels cl ON cl.id = wc.level_id
+       JOIN students st ON st.id = wc.student_id
+       WHERE st.center_id = ?`
     )
-    .all();
+    .all(centerId);
 
   const counts = new Map();
   for (const row of completions) {

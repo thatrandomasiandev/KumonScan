@@ -29,7 +29,9 @@ async function findStudentOr404(req, res) {
     res.status(400).json({ error: 'Invalid student id' });
     return null;
   }
-  const student = await db.prepare('SELECT * FROM students WHERE id = ?').get(studentId);
+  const student = await db
+    .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
+    .get(studentId, req.center.id);
   if (!student) {
     res.status(404).json({ error: 'Student not found' });
     return null;
@@ -81,6 +83,7 @@ router.post('/students/:id/progress', requireAdmin, async (req, res) => {
 router.get('/reports/progress-pace', requireAdmin, async (req, res) => {
   try {
     const report = await getProgressPace({
+      centerId: req.center.id,
       weeks: req.query.weeks != null ? Number(req.query.weeks) : 4,
     });
     res.json(report);
