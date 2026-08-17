@@ -644,6 +644,23 @@ export async function ensureDb() {
           expires_at BIGINT NOT NULL
         )
       `);
+      // agent-offline: stored responses for replayed check-in/check-out
+      // requests (see server/middleware/idempotency.js). Keys are
+      // client-generated UUIDs, globally unique like revoked token hashes,
+      // so the table stays out of TENANT_TABLES; center_id still scopes
+      // every lookup so one center can never read another's stored response.
+      await exec(`
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+          key TEXT PRIMARY KEY,
+          center_id INTEGER NOT NULL REFERENCES centers(id),
+          response_body TEXT NOT NULL,
+          status_code INTEGER NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      `);
+      await exec(
+        `CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at ON idempotency_keys(created_at)`
+      );
       await migrateTenancy();
     })().catch((err) => {
       migratePromise = null;

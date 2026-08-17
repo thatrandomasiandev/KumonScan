@@ -42,9 +42,10 @@ export const caregiversApi = {
       body: JSON.stringify(body),
     }),
 
-  checkOut: ({ session_id, student_id, picked_up_by } = {}) =>
+  checkOut: ({ session_id, student_id, picked_up_by, idempotencyKey } = {}) =>
     request('/check-out', {
       method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
       body: JSON.stringify({ session_id, student_id, picked_up_by }),
     }),
 

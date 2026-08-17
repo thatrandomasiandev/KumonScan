@@ -28,6 +28,10 @@ import { caregiversApi } from '../caregiversApi'; // agent-2-pickup-auth
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { useSnackbar } from '../components/SnackbarProvider';
+// agent-offline: check-ins/outs go through a persistent IndexedDB queue so a
+// dropped connection delays them instead of failing them (see client/src/offline/).
+import OfflineStatusChip from '../offline/OfflineStatusChip';
+import { useOfflineQueue } from '../offline/useOfflineQueue';
 import { md3Colors, getElevatedSurface, motion, shape } from '../theme';
 
 const SUBJECT_OPTIONS = [
@@ -339,6 +343,7 @@ export default function DeskPage() {
   const [absent, setAbsent] = useState(null);
   const [absentLoading, setAbsentLoading] = useState(false);
   const [clockSkewMs, setClockSkewMs] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const timezone = present.timezone || 'America/Los_Angeles';
 
@@ -393,12 +398,33 @@ export default function DeskPage() {
         }
       }
       setError(null);
+      setLastSyncedAt(new Date());
     } catch (err) {
-      setError(err.message);
+      // agent-offline: a network drop must not blank the roster or raise an
+      // error banner; the last-known state stays up, marked stale, and the
+      // offline chip explains why. Real HTTP errors still surface.
+      if (err?.status != null) setError(err.message);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleSyncResult = useCallback(
+    (outcome) => {
+      const label = outcome.action?.label || 'Queued action';
+      if (outcome.status === 'delivered') {
+        showSnackbar(`${label} synced`);
+      } else {
+        showSnackbar(`${label} could not sync: ${outcome.error?.message || 'rejected'}`);
+      }
+      void loadData();
+    },
+    [showSnackbar, loadData]
+  );
+
+  const { online, pendingCount, syncing, submitCheckIn, submitCheckOut } = useOfflineQueue({
+    onSyncResult: handleSyncResult,
+  });
 
   useEffect(() => {
     loadData();
@@ -460,11 +486,23 @@ export default function DeskPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const result = await api.checkIn(selected.id, subjects, { mode });
       const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
-      showSnackbar(
-        `${result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
+      const outcome = await submitCheckIn(
+        { student_id: selected.id, subjects, mode },
+        `${selected.name} check-in`
       );
+      if (outcome.status === 'rejected') {
+        setError(outcome.error.message);
+        showSnackbar(outcome.error.message);
+        return;
+      }
+      if (outcome.status === 'delivered') {
+        showSnackbar(
+          `${outcome.result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
+        );
+      } else {
+        showSnackbar(`${selected.name} saved — checks in when connection returns`);
+      }
       setSelected(null);
       setMode('in_person');
       await loadData();
@@ -480,16 +518,10 @@ export default function DeskPage() {
     if (!checkoutTarget) return;
     setCheckingOut(true);
     try {
-      // agent-2-pickup-auth: optional picked_up_by on the same check-out call
-      const result = pickedUpBy
-        ? await caregiversApi.checkOut({
-            session_id: checkoutTarget.session_id,
-            picked_up_by: pickedUpBy,
-          })
-        : await api.checkOut({ session_id: checkoutTarget.session_id });
-
-      // agent-5-resources: materials logging is best-effort after check-out
-      // succeeds — a failed log warns but never blocks or reverts the check-out.
+      // agent-5-resources: materials logging is best-effort and independent
+      // of the checkout's own delivery — it fires now regardless of whether
+      // the checkout below is delivered immediately or queued for reconnect,
+      // since it never blocks or reverts the check-out either way.
       let materialsNote = '';
       if (materialsUsed.length > 0) {
         const outcomes = await Promise.allSettled(
@@ -508,12 +540,25 @@ export default function DeskPage() {
             : ` · ${materialsUsed.length} material${materialsUsed.length === 1 ? '' : 's'} logged`;
       }
 
-      const mins = Math.round(result.session.duration_minutes || 0);
-      const over =
-        result.session.is_overtime && result.session.overtime_minutes > 0
-          ? ` (+${result.session.overtime_minutes} over)`
-          : '';
-      showSnackbar(`${result.student.name} checked out · ${mins} min${over}${materialsNote}`);
+      // agent-2-pickup-auth: optional picked_up_by on the same check-out call,
+      // carried through the offline queue (see sendAction in offline/sync.js).
+      const outcome = await submitCheckOut(
+        { session_id: checkoutTarget.session_id, picked_up_by: pickedUpBy || undefined },
+        `${checkoutTarget.name} check-out`
+      );
+      if (outcome.status === 'rejected') {
+        showSnackbar(outcome.error.message);
+      } else if (outcome.status === 'delivered') {
+        const result = outcome.result;
+        const mins = Math.round(result.session.duration_minutes || 0);
+        const over =
+          result.session.is_overtime && result.session.overtime_minutes > 0
+            ? ` (+${result.session.overtime_minutes} over)`
+            : '';
+        showSnackbar(`${result.student.name} checked out · ${mins} min${over}${materialsNote}`);
+      } else {
+        showSnackbar(`${checkoutTarget.name} saved — checks out when connection returns${materialsNote}`);
+      }
       setCheckoutTarget(null);
       setMaterialsUsed([]);
       setMaterialsCatalog(null);
@@ -559,7 +604,20 @@ export default function DeskPage() {
       <PageHeader
         title="Front desk"
         subtitle="Search the roster, check in by subject, and watch session timers"
-        action={<LiveClock timezone={timezone} />}
+        action={
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+              gap: 1,
+            }}
+          >
+            <OfflineStatusChip online={online} pendingCount={pendingCount} syncing={syncing} />
+            <LiveClock timezone={timezone} />
+          </Box>
+        }
       />
 
       {error && (
@@ -676,6 +734,21 @@ export default function DeskPage() {
               Tap a name to check out
               {overtimeCount > 0 ? ` · ${overtimeCount} over time` : ''}
             </Typography>
+            {!online && (
+              <Typography
+                variant="bodySmall"
+                sx={{
+                  display: 'block',
+                  mt: 0.25,
+                  fontWeight: 600,
+                  color: overtimeCount > 0 ? md3Colors.onErrorContainer : md3Colors.onSurfaceVariant,
+                }}
+              >
+                Offline — roster as of{' '}
+                {lastSyncedAt ? formatShortTime(lastSyncedAt.toISOString(), timezone) : '—'}, may be
+                out of date
+              </Typography>
+            )}
             {(present.expected_today != null || present.capacity_today != null) && (
               <Typography
                 variant="bodySmall"
