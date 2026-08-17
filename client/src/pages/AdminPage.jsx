@@ -48,6 +48,7 @@ import StaffPanel from '../components/StaffPanel';
 import DataPortabilityPanel from '../components/DataPortabilityPanel'; // agent-10-data-portability
 import ResourceInventory from '../components/ResourceInventory'; // agent-5-resources
 import CaregiverManager from '../components/CaregiverManager'; // agent-2-pickup-auth
+import ProgressTracker from '../components/ProgressTracker';
 import { useSnackbar } from '../components/SnackbarProvider';
 import { DEFAULT_LANGUAGE, getLanguageOptions } from '../i18n';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
@@ -1650,6 +1651,10 @@ export default function AdminPage() {
 
               {/* agent-2-pickup-auth */}
               <CaregiverManager student={selectedStudent} />
+
+              <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
+
+              <ProgressTracker student={selectedStudent} />
 
               <Divider sx={{ my: 2, borderColor: md3Colors.outlineVariant }} />
 

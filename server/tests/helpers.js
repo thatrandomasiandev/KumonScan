@@ -148,6 +148,15 @@ export async function wipeCenterData(...centerIds) {
   if (await tableExists('resource_usage') && (await tableHasColumn('resource_usage', 'center_id'))) {
     await db.prepare('DELETE FROM resource_usage WHERE center_id = ANY(?::int[])').run(ids);
   }
+  if (await tableExists('worksheet_completions')) {
+    // References both sessions and students; must clear before either.
+    await db
+      .prepare(
+        `DELETE FROM worksheet_completions
+         WHERE student_id IN (SELECT id FROM students WHERE center_id = ANY(?::int[]))`
+      )
+      .run(ids);
+  }
   if (await tableExists('sessions')) {
     await db
       .prepare(
@@ -188,6 +197,14 @@ export async function wipeCenterData(...centerIds) {
   }
   if (await tableExists('digest_log') && (await tableHasColumn('digest_log', 'center_id'))) {
     await db.prepare('DELETE FROM digest_log WHERE center_id = ANY(?::int[])').run(ids);
+  }
+  if (await tableExists('student_progress')) {
+    await db
+      .prepare(
+        `DELETE FROM student_progress
+         WHERE student_id IN (SELECT id FROM students WHERE center_id = ANY(?::int[]))`
+      )
+      .run(ids);
   }
   if (await tableExists('parent_access_tokens')) {
     await db

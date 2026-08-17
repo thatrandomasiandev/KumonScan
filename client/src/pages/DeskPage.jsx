@@ -25,6 +25,7 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { api, formatDuration, formatTime } from '../api';
 import { resourcesApi } from '../resourcesApi'; // agent-5-resources
 import { caregiversApi } from '../caregiversApi'; // agent-2-pickup-auth
+import { curriculumApi } from '../curriculumApi';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
 import { useSnackbar } from '../components/SnackbarProvider';
@@ -57,6 +58,10 @@ const toggleGroupSx = {
     },
   },
 };
+
+// Optional worksheet logging at check-out. Set VITE_DESK_WORKSHEET_LOG=0 to
+// hide the field; logging is best-effort and never blocks the check-out.
+const DESK_WORKSHEET_LOG_ENABLED = import.meta.env.VITE_DESK_WORKSHEET_LOG !== '0';
 
 function formatClock(date, timezone, { compact = false } = {}) {
   if (compact) {
@@ -339,6 +344,9 @@ export default function DeskPage() {
   // agent-2-pickup-auth
   const [pickupCaregivers, setPickupCaregivers] = useState([]);
   const [pickedUpBy, setPickedUpBy] = useState('');
+  // Optional worksheet log at check-out (see DESK_WORKSHEET_LOG_ENABLED).
+  const [worksheetSubject, setWorksheetSubject] = useState('math');
+  const [worksheetPage, setWorksheetPage] = useState('');
   const [tick, setTick] = useState(0);
   const [absent, setAbsent] = useState(null);
   const [absentLoading, setAbsentLoading] = useState(false);
@@ -479,6 +487,13 @@ export default function DeskPage() {
     }
   }, [selected]);
 
+  // Fresh worksheet fields per check-out; default subject from the session.
+  useEffect(() => {
+    if (!checkoutTarget) return;
+    setWorksheetPage('');
+    setWorksheetSubject(checkoutTarget.subjects === 'reading' ? 'reading' : 'math');
+  }, [checkoutTarget]);
+
   async function handleCheckIn(e) {
     e.preventDefault();
     if (!selected || submitting) return;
@@ -518,10 +533,10 @@ export default function DeskPage() {
     if (!checkoutTarget) return;
     setCheckingOut(true);
     try {
-      // agent-5-resources: materials logging is best-effort and independent
-      // of the checkout's own delivery — it fires now regardless of whether
+      // agent-5-resources / worksheet log: both best-effort and independent
+      // of the checkout's own delivery — they fire now regardless of whether
       // the checkout below is delivered immediately or queued for reconnect,
-      // since it never blocks or reverts the check-out either way.
+      // since neither blocks or reverts the check-out either way.
       let materialsNote = '';
       if (materialsUsed.length > 0) {
         const outcomes = await Promise.allSettled(
@@ -540,6 +555,21 @@ export default function DeskPage() {
             : ` · ${materialsUsed.length} material${materialsUsed.length === 1 ? '' : 's'} logged`;
       }
 
+      let worksheetNote = '';
+      const page = Number(worksheetPage);
+      if (DESK_WORKSHEET_LOG_ENABLED && worksheetPage !== '' && Number.isInteger(page)) {
+        try {
+          const logged = await curriculumApi.logCompletion(checkoutTarget.id, {
+            subject: worksheetSubject,
+            page_number: page,
+            session_id: checkoutTarget.session_id,
+          });
+          worksheetNote = ` · ${logged.completion.level_code} page ${logged.completion.page_number} logged`;
+        } catch (logErr) {
+          worksheetNote = ` · worksheet log failed: ${logErr.message}`;
+        }
+      }
+
       // agent-2-pickup-auth: optional picked_up_by on the same check-out call,
       // carried through the offline queue (see sendAction in offline/sync.js).
       const outcome = await submitCheckOut(
@@ -555,15 +585,20 @@ export default function DeskPage() {
           result.session.is_overtime && result.session.overtime_minutes > 0
             ? ` (+${result.session.overtime_minutes} over)`
             : '';
-        showSnackbar(`${result.student.name} checked out · ${mins} min${over}${materialsNote}`);
+        showSnackbar(
+          `${result.student.name} checked out · ${mins} min${over}${materialsNote}${worksheetNote}`
+        );
       } else {
-        showSnackbar(`${checkoutTarget.name} saved — checks out when connection returns${materialsNote}`);
+        showSnackbar(
+          `${checkoutTarget.name} saved — checks out when connection returns${materialsNote}${worksheetNote}`
+        );
       }
       setCheckoutTarget(null);
       setMaterialsUsed([]);
       setMaterialsCatalog(null);
       setPickedUpBy('');
       setPickupCaregivers([]);
+      setWorksheetPage('');
       await loadData();
     } catch (err) {
       showSnackbar(err.message);
@@ -1075,6 +1110,37 @@ export default function DeskPage() {
               )}
               sx={{ mt: 2.5, minWidth: { sm: 360 } }}
             />
+          )}
+          {DESK_WORKSHEET_LOG_ENABLED && (
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mt: 2.5, flexWrap: 'wrap' }}>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={worksheetSubject}
+                onChange={(_e, next) => {
+                  if (next) setWorksheetSubject(next);
+                }}
+                disabled={checkingOut}
+                aria-label="Subject of the completed worksheet"
+              >
+                <ToggleButton value="math" sx={{ textTransform: 'none', px: 2 }}>
+                  Math
+                </ToggleButton>
+                <ToggleButton value="reading" sx={{ textTransform: 'none', px: 2 }}>
+                  Reading
+                </ToggleButton>
+              </ToggleButtonGroup>
+              <TextField
+                size="small"
+                label="Worksheet page (optional)"
+                value={worksheetPage}
+                onChange={(e) => setWorksheetPage(e.target.value)}
+                disabled={checkingOut}
+                inputProps={{ inputMode: 'numeric', min: 1, max: 200, type: 'number' }}
+                helperText="Logs at the student's current level"
+                sx={{ width: 220 }}
+              />
+            </Box>
           )}
         </DialogContent>
         <DialogActions>

@@ -9,10 +9,9 @@ import { formatFullName } from '../utils/names.js';
  * Attendance data (visits, minutes, overtime) is always available. Two seams
  * cover work owned by other agents:
  *
- * 1. Curriculum progress (agent 11). `fetchProgressSummary` reads these tables
- *    if they exist and returns null (never throws) if they don't:
- *      worksheet_completions(student_id, subject, pages, completed_at ISO text)
- *      student_progress(student_id, subject, current_level, updated_at ISO text)
+ * 1. Curriculum progress (agent-curriculum). `fetchProgressSummary` reads
+ *    worksheet_completions and student_progress (server/services/curriculumService.js)
+ *    if they exist and returns null (never throws) if they don't.
  *
  * 2. Delivery channel (agents 1/8). `resolveDeliveryChannel` dynamically
  *    imports messagingService.js / whatsappService.js if present. With neither
@@ -98,30 +97,40 @@ async function curriculumTablesExist() {
  * Curriculum-tracking seam (see module docblock for the expected tables).
  * Returns null, never throws, when curriculum tracking is not installed or
  * its schema differs from the documented interface.
+ *
+ * Each worksheet_completions row is one graded page (see curriculumService.js
+ * logCompletion), so counting rows in a date range gives pages completed in
+ * that range — not a `pages` column to sum.
  */
 export async function fetchProgressSummary(studentId, periodStart, periodEnd) {
   try {
     if (!(await curriculumTablesExist())) return null;
 
     const completions = await db
-      .prepare('SELECT pages, completed_at FROM worksheet_completions WHERE student_id = ?')
+      .prepare(
+        `SELECT wc.completed_at
+         FROM worksheet_completions wc
+         WHERE wc.student_id = ?`
+      )
       .all(studentId);
 
     const pagesBetween = (start, end) =>
-      completions
-        .filter((row) => {
-          const date = getDateInTimezone(row.completed_at);
-          return date >= start && date <= end;
-        })
-        .reduce((sum, row) => sum + (Number(row.pages) || 0), 0);
+      completions.filter((row) => {
+        const date = getDateInTimezone(row.completed_at);
+        return date >= start && date <= end;
+      }).length;
 
     const levels = (
       await db
         .prepare(
-          'SELECT subject, current_level FROM student_progress WHERE student_id = ? ORDER BY subject ASC'
+          `SELECT sp.subject, cl.level_code
+           FROM student_progress sp
+           JOIN curriculum_levels cl ON cl.id = sp.current_level_id
+           WHERE sp.student_id = ?
+           ORDER BY sp.subject ASC`
         )
         .all(studentId)
-    ).map((row) => ({ subject: row.subject, level: row.current_level }));
+    ).map((row) => ({ subject: row.subject, level: row.level_code }));
 
     return {
       pages_completed: pagesBetween(periodStart, periodEnd),

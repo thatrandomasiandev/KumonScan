@@ -8,6 +8,7 @@ import {
   runDigestBatch,
   weeklyPeriod,
 } from '../services/digestService.js';
+import { ensureCurriculumSchema } from '../services/curriculumService.js';
 
 const PERIOD = { start: '2026-07-20', end: '2026-07-26' };
 const CRON_SECRET = 'test-cron-secret';
@@ -102,26 +103,22 @@ async function digestRows(studentId) {
     .all(studentId);
 }
 
-async function dropCurriculumTables() {
-  await db.exec('DROP TABLE IF EXISTS worksheet_completions');
-  await db.exec('DROP TABLE IF EXISTS student_progress');
-}
-
 describe('parent progress digests', () => {
   let cookie;
 
   beforeEach(async () => {
     process.env.CRON_SECRET = CRON_SECRET;
     await ensureDigestSchema();
-    await dropCurriculumTables();
     // CASCADE clears rows in any student-referencing tables other agents'
-    // in-flight schema may have added to the shared test branch.
+    // in-flight schema may have added to the shared test branch (this also
+    // sweeps worksheet_completions/student_progress, which FK-reference
+    // students; curriculum_levels is a shared global catalog and is never
+    // truncated).
     await db.exec('TRUNCATE TABLE digest_log, sessions, students CASCADE');
     cookie = await loginCookie();
   });
 
   afterEach(async () => {
-    await dropCurriculumTables();
     delete process.env.CRON_SECRET;
   });
 
@@ -132,7 +129,7 @@ describe('parent progress digests', () => {
     expect(weeklyPeriod('2026-08-02')).toEqual({ period_start: PERIOD.start, period_end: PERIOD.end });
   });
 
-  it('buildDigestContent summarizes attendance and omits progress when curriculum tracking is absent', async () => {
+  it('buildDigestContent summarizes attendance and reports zero worksheets for a student with no curriculum activity', async () => {
     const { id } = await insertStudent({ first: 'Aiko', last: 'Tanaka', phone: '+12135550100' });
     await insertCompletedSession(id, { checkIn: '2026-07-21T20:00:00.000Z', minutes: 45 });
     await insertCompletedSession(id, { checkIn: '2026-07-23T20:00:00.000Z', minutes: 75 }); // overtime (>60)
@@ -141,56 +138,49 @@ describe('parent progress digests', () => {
     const content = await buildDigestContent(id, PERIOD.start, PERIOD.end);
 
     expect(content.attendance).toEqual({ visits: 2, total_minutes: 120, overtime_count: 1 });
-    expect(content.progress).toBeNull();
+    // Curriculum tables exist in the full integration (agent-curriculum), so
+    // this student's total absence of activity reports as zeros, not null.
+    expect(content.progress).toEqual({ pages_completed: 0, previous_pages: 0, levels: [] });
     expect(content.text).toContain('2 visits');
     expect(content.text).toContain('120 minutes');
     expect(content.text).toContain('1 session over the time allowance');
-    expect(content.text).not.toContain('Worksheets');
+    expect(content.text).toContain('Worksheets: 0 pages completed');
+    expect(content.text).not.toContain('Current levels');
   });
 
   it('buildDigestContent includes pages, pace, and levels when curriculum tables exist', async () => {
     const { id } = await insertStudent({ first: 'Ben', last: 'Ruiz', phone: '+12135550101' });
     await insertCompletedSession(id, { checkIn: '2026-07-22T20:00:00.000Z', minutes: 30, subjects: 'math' });
 
-    await db.exec(`
-      CREATE TABLE worksheet_completions (
-        id SERIAL PRIMARY KEY,
-        student_id INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        pages INTEGER NOT NULL,
-        completed_at TEXT NOT NULL
-      )
-    `);
-    await db.exec(`
-      CREATE TABLE student_progress (
-        id SERIAL PRIMARY KEY,
-        student_id INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        current_level TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `);
+    // Real schema (server/services/curriculumService.js): one row per graded
+    // page, level looked up by id, not a `pages`/`current_level` shortcut.
+    await ensureCurriculumSchema();
+    const level = await db
+      .prepare(`SELECT id FROM curriculum_levels WHERE subject = 'math' AND level_code = 'D'`)
+      .get();
     const insertCompletion = db.prepare(
-      `INSERT INTO worksheet_completions (student_id, subject, pages, completed_at) VALUES (?, ?, ?, ?)`
+      `INSERT INTO worksheet_completions (student_id, level_id, page_number, completed_at)
+       VALUES (?, ?, ?, ?)`
     );
-    await insertCompletion.run(id, 'math', 14, '2026-07-21T20:00:00.000Z'); // in period
-    await insertCompletion.run(id, 'math', 10, '2026-07-24T20:00:00.000Z'); // in period
-    await insertCompletion.run(id, 'math', 18, '2026-07-15T20:00:00.000Z'); // previous week
+    await insertCompletion.run(id, level.id, 44, '2026-07-21T20:00:00.000Z'); // in period
+    await insertCompletion.run(id, level.id, 45, '2026-07-24T20:00:00.000Z'); // in period
+    await insertCompletion.run(id, level.id, 43, '2026-07-15T20:00:00.000Z'); // previous week
     await db
       .prepare(
-        `INSERT INTO student_progress (student_id, subject, current_level, updated_at) VALUES (?, ?, ?, ?)`
+        `INSERT INTO student_progress (student_id, subject, current_level_id, current_page, updated_at)
+         VALUES (?, 'math', ?, 45, ?)`
       )
-      .run(id, 'math', 'D', '2026-07-24T20:00:00.000Z');
+      .run(id, level.id, '2026-07-24T20:00:00.000Z');
 
     const content = await buildDigestContent(id, PERIOD.start, PERIOD.end);
 
     expect(content.progress).toEqual({
-      pages_completed: 24,
-      previous_pages: 18,
+      pages_completed: 2,
+      previous_pages: 1,
       levels: [{ subject: 'math', level: 'D' }],
     });
-    expect(content.text).toContain('24 pages completed');
-    expect(content.text).toContain('up from 18 last week');
+    expect(content.text).toContain('2 pages completed');
+    expect(content.text).toContain('up from 1 last week');
     expect(content.text).toContain('Current levels: math D');
   });
 
