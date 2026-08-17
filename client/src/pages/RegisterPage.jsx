@@ -41,14 +41,9 @@ function RegistrationConfirmation({ registration, onReset }) {
         <CheckCircleOutlinedIcon sx={{ fontSize: 40, color: md3Colors.success }} />
       </Box>
 
-      <Typography variant="titleLarge" sx={{ mb: registration.student_number ? 0.5 : 3 }}>
+      <Typography variant="titleLarge" sx={{ mb: 3 }}>
         {registration.first_name} {registration.last_name}
       </Typography>
-      {registration.student_number && (
-        <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant, mb: 3 }}>
-          {t('register.studentNumber', { number: registration.student_number })}
-        </Typography>
-      )}
 
       <Typography variant="bodyMedium" sx={{ mb: 3 }}>
         {registration.is_new ? t('register.newStudentInfo') : t('register.returningStudentInfo')}

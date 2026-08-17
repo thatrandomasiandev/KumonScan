@@ -4,24 +4,28 @@ import { formatFullName } from '../utils/names.js';
 import { allowanceForSubjects, normalizeSubjects } from '../sessionRules.js';
 
 /**
- * Assigns the next sequential student_number for a center and inserts the
- * new student in the same transaction (holding a Postgres advisory lock for
- * the duration) so two concurrent registrations can never be handed the
- * same number. `insertFn(tx, studentNumber)` must run the INSERT and
- * return the new student's id.
+ * Kumon center student ID (from CRM roster import or staff entry).
+ * Not auto-assigned — sequential #1, #2, … was wrong for real centers.
  */
-export async function insertStudentWithNumber(centerId, insertFn) {
-  return withRealTransaction(async (tx) => {
-    await tx
-      .prepare(`SELECT pg_advisory_xact_lock(hashtext('student_number:' || ?::text))`)
-      .run(centerId);
-    const row = await tx
-      .prepare('SELECT COALESCE(MAX(student_number), 0) AS max FROM students WHERE center_id = ?')
-      .get(centerId);
-    const studentNumber = Number(row?.max || 0) + 1;
-    return insertFn(tx, studentNumber);
-  });
+export function parseStudentNumber(raw) {
+  if (raw == null || raw === '') return null;
+  const n =
+    typeof raw === 'number' ? raw : Number.parseInt(String(raw).trim(), 10);
+  if (!Number.isInteger(n) || n < 1) {
+    const error = new Error('student_number must be a positive integer');
+    error.code = 'INVALID_STUDENT_NUMBER';
+    throw error;
+  }
+  return n;
 }
+
+/** Runs insertFn inside a transaction; insertFn returns the new student's id. */
+export async function insertStudent(_centerId, insertFn) {
+  return withRealTransaction(async (tx) => insertFn(tx));
+}
+
+/** @deprecated use insertStudent — kept as alias for any stale imports */
+export const insertStudentWithNumber = insertStudent;
 
 export function alreadyCheckedInError(openSession) {
   const error = new Error('Student is already checked in');

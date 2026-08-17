@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import db, { isUniqueViolation, sqlNow } from '../db.js';
 import { fetchAuthoritativeTime } from '../timeService.js';
 import { formatFullName, normalizeName, validateNameField } from '../utils/names.js';
-import { insertStudentWithNumber } from '../services/studentService.js';
+import { insertStudent } from '../services/studentService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { resolveLanguage } from '../services/i18nService.js';
 import { captureError } from '../services/errorReportingService.js';
@@ -62,14 +62,14 @@ router.post('/register', registerLimiter, async (req, res) => {
   const preferred_language = resolveLanguage(rawLanguage);
 
   try {
-    const studentId = await insertStudentWithNumber(req.center.id, async (tx, studentNumber) => {
+    const studentId = await insertStudent(req.center.id, async (tx) => {
       const result = await tx
         .prepare(
           `INSERT INTO students
-             (center_id, first_name, last_name, registered_at, preferred_language, student_number)
-           VALUES (?, ?, ?, ?, ?, ?)`
+             (center_id, first_name, last_name, registered_at, preferred_language)
+           VALUES (?, ?, ?, ?, ?)`
         )
-        .run(req.center.id, first_name, last_name, sqlNow(), preferred_language, studentNumber);
+        .run(req.center.id, first_name, last_name, sqlNow(), preferred_language);
       return result.lastInsertRowid;
     });
 

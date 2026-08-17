@@ -47,6 +47,9 @@ function normalizeRow(row) {
   if (typeof out.student_id === 'bigint') out.student_id = Number(out.student_id);
   if (typeof out.session_id === 'bigint') out.session_id = Number(out.session_id);
   if (typeof out.staff_id === 'bigint') out.staff_id = Number(out.staff_id);
+  if (out.student_number != null && out.student_number !== '') {
+    out.student_number = Number(out.student_number);
+  }
   if (typeof out.count === 'bigint' || typeof out.count === 'string') {
     out.count = Number(out.count);
   }
@@ -353,23 +356,7 @@ async function migrateTenancy() {
       ON staff (center_id, LOWER(first_name), LOWER(last_name))
   `);
 
-  // Per-center sequential "student number" for desk name/number search.
-  // Idempotent: only rows still missing a number get one, continuing after
-  // that center's current max — safe to rerun on every boot.
-  await exec(`
-    WITH numbered AS (
-      SELECT
-        s1.id,
-        ROW_NUMBER() OVER (PARTITION BY s1.center_id ORDER BY s1.created_at ASC, s1.id ASC) AS rn,
-        (SELECT COALESCE(MAX(s2.student_number), 0) FROM students s2 WHERE s2.center_id = s1.center_id) AS base
-      FROM students s1
-      WHERE s1.student_number IS NULL
-    )
-    UPDATE students
-    SET student_number = numbered.base + numbered.rn
-    FROM numbered
-    WHERE students.id = numbered.id
-  `);
+  // Kumon center student ID — imported from roster or set by staff; never auto-filled.
   await exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_students_number_center
       ON students (center_id, student_number) WHERE student_number IS NOT NULL
@@ -393,7 +380,7 @@ async function migrateStudentsTable() {
         notify_channel TEXT NOT NULL DEFAULT 'sms',
         parent_whatsapp TEXT,
         preferred_language TEXT NOT NULL DEFAULT 'en',
-        student_number INTEGER
+        student_number BIGINT
       )
     `);
     return;
@@ -476,7 +463,10 @@ async function migrateStudentsTable() {
     );
   }
   if (!cols.includes('student_number')) {
-    await exec(`ALTER TABLE students ADD COLUMN student_number INTEGER`);
+    await exec(`ALTER TABLE students ADD COLUMN student_number BIGINT`);
+  } else {
+    // Kumon CRM IDs are 13 digits (e.g. 8401551142645); INTEGER overflows.
+    await exec(`ALTER TABLE students ALTER COLUMN student_number TYPE BIGINT`);
   }
   // QR check-in removed 2026-08-16: check-in is desk-only now, and the
   // codes are worthless without a scanner reading them. Drop, don't just

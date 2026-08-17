@@ -681,7 +681,11 @@ export default function DeskPage() {
           options={rosterOptions}
           value={selected}
           onChange={(_e, value) => setSelected(value)}
-          getOptionLabel={(option) => option.name || ''}
+          getOptionLabel={(option) =>
+            option.student_number
+              ? `${option.name} (ID ${option.student_number})`
+              : option.name || ''
+          }
           isOptionEqualToValue={(a, b) => a.id === b.id}
           filterOptions={(options, { inputValue }) => {
             const q = inputValue.trim().toLowerCase();
@@ -697,8 +701,8 @@ export default function DeskPage() {
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Student name or number"
-              placeholder="Search first or last name, or student number"
+              label="Student name or ID"
+              placeholder="Search name or Kumon student ID"
               autoFocus
             />
           )}

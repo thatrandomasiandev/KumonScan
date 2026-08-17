@@ -125,6 +125,26 @@ describe('rosterImport', () => {
     }
   });
 
+  it('imports Kumon student ID from roster column', async () => {
+    const csv = [
+      'Student ID,First Name,Last Name,Subjects',
+      '8401551142645,Alex,Kim,both',
+      '8402450097982,Jordan,Lee,math',
+    ].join('\n');
+
+    const result = await importRosterFromContent(csv, center.id);
+    expect(result.summary.created).toBe(2);
+    expect(result.sourceColumns.hasStudentNumberColumn).toBe(true);
+
+    const alex = await db
+      .prepare(
+        `SELECT student_number FROM students
+         WHERE center_id = ? AND first_name = 'Alex' AND last_name = 'Kim'`
+      )
+      .get(center.id);
+    expect(alex.student_number).toBe(8401551142645);
+  });
+
   it('replace mode deactivates existing students absent from the new file', async () => {
     const keep = await insertStudent(center.id, { first: 'Keep', last: 'Me' });
     const drop = await insertStudent(center.id, { first: 'Drop', last: 'Me' });
