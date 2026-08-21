@@ -92,8 +92,11 @@ export function createApp() {
     res.json({ status: 'ok' });
   });
 
+  // Serve the built SPA only in production. In local `npm run dev`, Express is
+  // API-only on :3001; Vite on :5173 owns the UI. Serving client/dist here in
+  // development made :3001 look like a second (stale) frontend.
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
-  if (!process.env.VERCEL && fs.existsSync(clientDist)) {
+  if (isProd && !process.env.VERCEL && fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path === '/health') return next();
