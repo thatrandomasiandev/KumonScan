@@ -28,6 +28,7 @@ import { caregiversApi } from '../caregiversApi'; // agent-2-pickup-auth
 import { curriculumApi } from '../curriculumApi';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
+import RegisterPanel from '../components/RegisterPanel';
 import { useSnackbar } from '../components/SnackbarProvider';
 // agent-offline: check-ins/outs go through a persistent IndexedDB queue so a
 // dropped connection delays them instead of failing them (see client/src/offline/).
@@ -407,11 +408,13 @@ export default function DeskPage() {
       }
       setError(null);
       setLastSyncedAt(new Date());
+      return studentsData;
     } catch (err) {
       // agent-offline: a network drop must not blank the roster or raise an
       // error banner; the last-known state stays up, marked stale, and the
       // offline chip explains why. Real HTTP errors still surface.
       if (err?.status != null) setError(err.message);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -493,6 +496,27 @@ export default function DeskPage() {
     setWorksheetPage('');
     setWorksheetSubject(checkoutTarget.subjects === 'reading' ? 'reading' : 'math');
   }, [checkoutTarget]);
+
+  async function handleRegistered(registration) {
+    showSnackbar(
+      registration.is_new
+        ? `${registration.name} registered — select subject and check in`
+        : `${registration.name} already on roster — select subject and check in`
+    );
+    const roster = await loadData();
+    const match = roster?.find((s) => s.id === registration.student_id);
+    setSelected(
+      match || {
+        id: registration.student_id,
+        first_name: registration.first_name,
+        last_name: registration.last_name,
+        name: registration.name,
+        student_number: registration.student_number,
+        active: true,
+        enrolled_subjects: 'both',
+      }
+    );
+  }
 
   async function handleCheckIn(e) {
     e.preventDefault();
@@ -638,7 +662,7 @@ export default function DeskPage() {
     <Box sx={{ maxWidth: 960, mx: 'auto', px: 2, py: 4, pb: { xs: 12, md: 4 } }}>
       <PageHeader
         title="Front desk"
-        subtitle="Search the roster, check in by subject, and watch session timers"
+        subtitle="Register students, check in by subject, and watch session timers"
         action={
           <Box
             sx={{
@@ -734,6 +758,8 @@ export default function DeskPage() {
           {submitting ? 'Checking in…' : 'Check in'}
         </Button>
       </Paper>
+
+      <RegisterPanel onRegistered={handleRegistered} />
 
       <Paper
         elevation={0}

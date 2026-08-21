@@ -74,8 +74,6 @@ export default function BottomNav({ centerSlug }) {
   const navigate = useNavigate();
   const currentPage = pagePath(location.pathname);
 
-  if (currentPage === '/register') return null;
-
   return (
     <Box
       component="nav"

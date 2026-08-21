@@ -5,14 +5,13 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DeskPage from './pages/DeskPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
-import RegisterPage from './pages/RegisterPage';
 import MessagesPanel from './components/MessagesPanel';
 import InsightsPage from './pages/InsightsPage'; // agent-7-insights
 import BookingPage from './pages/BookingPage'; // agent-3-self-scheduling
 import StatusPage from './pages/StatusPage'; // agent-observability
 import ParentApp from './parent/ParentApp'; // agent-13-parent-pwa
 import { api, setCenterSlug } from './api';
-import { DEFAULT_CENTER_SLUG } from './centerPath';
+import { DEFAULT_CENTER_SLUG, centerPath } from './centerPath';
 
 /**
  * Sync the URL's :centerSlug into the API client so every request hits
@@ -24,6 +23,12 @@ function CenterScope({ children }) {
     setCenterSlug(centerSlug);
   }, [centerSlug]);
   return children;
+}
+
+/** Old /register URLs land on Desk, where registration now lives. */
+function RegisterToDeskRedirect() {
+  const { centerSlug } = useParams();
+  return <Navigate to={centerPath(centerSlug, '/desk')} replace />;
 }
 
 /**
@@ -52,7 +57,8 @@ function CenterRoutes() {
   return (
     <CenterScope>
       <Routes>
-        <Route path="register" element={<RegisterPage />} />
+        {/* Registration lives on Desk; keep old URLs working. */}
+        <Route path="register" element={<RegisterToDeskRedirect />} />
         {/* agent-3-self-scheduling: public parent booking, outside the staff shell */}
         <Route path="book" element={<BookingPage />} />
         <Route
@@ -123,7 +129,7 @@ export default function App() {
     <Routes>
       {/* Legacy unprefixed URLs land on the original (seeded) center. */}
       <Route path="/" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}`} replace />} />
-      <Route path="/register" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/register`} replace />} />
+      <Route path="/register" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/desk`} replace />} />
       <Route path="/desk" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/desk`} replace />} />
       {/* agent-13-parent-pwa: parent PWA, global (magic-link auth carries the
           student's tenancy; parentApi talks to the unslugged default-center API). */}
