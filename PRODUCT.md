@@ -6,9 +6,9 @@ product
 
 ## Users
 
-Center staff run the front desk, admin panel, and dashboard on a tablet or laptop at the front desk. They need name-based check-in with subject selection, a live on-floor list with overtime flags, student registration, and session history without walking the floor.
+Center staff run the front desk, admin panel, and dashboard on a tablet or laptop at the front desk. They need name-based check-in with subject selection, a live on-floor list with overtime flags, student registration on the same Desk screen, and session history without walking the floor.
 
-Students and parents use the self-registration flow (name only, no code) on phones or shared tablets when joining the roster. Many users are elementary-school age: large type, short copy, 44px minimum touch targets on student-facing controls.
+Students are added to the roster from Desk (name only). Touch targets stay at least 44px; type stays large enough for a busy counter.
 
 ## Product Purpose
 
@@ -40,7 +40,7 @@ Clear, calm, official: a center front-desk tool, not a startup landing page. War
 
 1. **Task first:** one obvious primary action per screen (check in, see who is here).
 2. **Earned familiarity:** top nav, cards, and tables staff already recognize; no novel affordances on the critical path.
-3. **Kid-readable:** large type, plain language, generous touch targets on the registration flow.
+3. **Kid-readable:** large type, plain language, generous touch targets on Desk registration and check-in.
 4. **Official trust:** Kumon blue and red on actions and accents only; neutrals carry surfaces.
 5. **Honest feedback:** check-in, check-out, and overtime states use color and label together, never icon alone.
 

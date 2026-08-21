@@ -3,7 +3,6 @@ import { Box, Typography } from '@mui/material';
 import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import BrandMark from './BrandMark';
@@ -12,7 +11,6 @@ import { centerPath, pagePath } from '../centerPath';
 
 const railItems = [
   { path: '/desk', label: 'Desk', icon: DeskOutlinedIcon },
-  { path: '/register', label: 'Register', icon: PersonAddOutlinedIcon },
   { path: '/dashboard', label: 'Dashboard', icon: BarChartOutlinedIcon },
   { path: '/messages', label: 'Messages', icon: ForumOutlinedIcon }, // agent-1-messaging
   { path: '/insights', label: 'Insights', icon: InsightsOutlinedIcon }, // agent-7-insights

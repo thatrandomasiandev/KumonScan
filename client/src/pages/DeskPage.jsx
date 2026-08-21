@@ -21,13 +21,16 @@ import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
+import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import { useTranslation } from 'react-i18next';
 import { api, formatDuration, formatTime } from '../api';
 import { resourcesApi } from '../resourcesApi'; // agent-5-resources
 import { caregiversApi } from '../caregiversApi'; // agent-2-pickup-auth
 import { curriculumApi } from '../curriculumApi';
 import PageHeader from '../components/PageHeader';
 import LoadingScreen from '../components/LoadingScreen';
+import RegisterPanel, { parseNameHint } from '../components/RegisterPanel';
 import { useSnackbar } from '../components/SnackbarProvider';
 // agent-offline: check-ins/outs go through a persistent IndexedDB queue so a
 // dropped connection delays them instead of failing them (see client/src/offline/).
@@ -325,12 +328,16 @@ function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
 
 export default function DeskPage() {
   const { showSnackbar } = useSnackbar();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [students, setStudents] = useState([]);
   const [present, setPresent] = useState({ students: [], count: 0, overtime_count: 0, timezone: 'America/Los_Angeles' });
   const [completed, setCompleted] = useState({ students: [], count: 0 });
   const [selected, setSelected] = useState(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [showRegister, setShowRegister] = useState(false);
+  const [registerHint, setRegisterHint] = useState({ firstName: '', lastName: '' });
   const [subjects, setSubjects] = useState('both');
   const [mode, setMode] = useState('in_person');
   const [remoteSessionIds, setRemoteSessionIds] = useState(() => new Set());
@@ -386,6 +393,20 @@ export default function DeskPage() {
     [students, activeRoster]
   );
 
+  const filteredRosterOptions = useMemo(() => {
+    const q = searchInput.trim().toLowerCase();
+    if (!q) return rosterOptions;
+    return rosterOptions.filter(
+      (s) =>
+        s.first_name.toLowerCase().includes(q) ||
+        s.last_name.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        String(s.student_number ?? '').includes(q)
+    );
+  }, [rosterOptions, searchInput]);
+
+  const noSearchMatch = Boolean(searchInput.trim()) && filteredRosterOptions.length === 0 && !selected;
+
   const loadData = useCallback(async () => {
     try {
       const [studentsData, presentData, completedData, remoteData] = await Promise.all([
@@ -407,11 +428,13 @@ export default function DeskPage() {
       }
       setError(null);
       setLastSyncedAt(new Date());
+      return studentsData;
     } catch (err) {
       // agent-offline: a network drop must not blank the roster or raise an
       // error banner; the last-known state stays up, marked stale, and the
       // offline chip explains why. Real HTTP errors still surface.
       if (err?.status != null) setError(err.message);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -493,6 +516,68 @@ export default function DeskPage() {
     setWorksheetPage('');
     setWorksheetSubject(checkoutTarget.subjects === 'reading' ? 'reading' : 'math');
   }, [checkoutTarget]);
+
+  function openRegisterFromSearch() {
+    const hint = parseNameHint(searchInput);
+    setRegisterHint(hint);
+    setShowRegister(true);
+    // Close the autocomplete list by blurring after the click settles.
+    requestAnimationFrame(() => {
+      document.getElementById('desk-register-panel')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    });
+  }
+
+  async function handleRegistered(registration) {
+    setShowRegister(false);
+    setSearchInput('');
+    const roster = await loadData();
+    const match = roster?.find((s) => s.id === registration.student_id);
+    const student =
+      match || {
+        id: registration.student_id,
+        first_name: registration.first_name,
+        last_name: registration.last_name,
+        name: registration.name,
+        student_number: registration.student_number,
+        active: true,
+        enrolled_subjects: 'both',
+      };
+    setSelected(student);
+
+    // Finish check-in with the subject/mode already chosen above.
+    setSubmitting(true);
+    setError(null);
+    try {
+      const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
+      const outcome = await submitCheckIn(
+        { student_id: student.id, subjects, mode },
+        `${student.name} check-in`
+      );
+      if (outcome.status === 'rejected') {
+        setError(outcome.error.message);
+        showSnackbar(outcome.error.message);
+        return;
+      }
+      if (outcome.status === 'delivered') {
+        showSnackbar(
+          `${outcome.result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
+        );
+      } else {
+        showSnackbar(`${student.name} saved — checks in when connection returns`);
+      }
+      setSelected(null);
+      setMode('in_person');
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+      showSnackbar(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleCheckIn(e) {
     e.preventDefault();
@@ -638,7 +723,7 @@ export default function DeskPage() {
     <Box sx={{ maxWidth: 960, mx: 'auto', px: 2, py: 4, pb: { xs: 12, md: 4 } }}>
       <PageHeader
         title="Front desk"
-        subtitle="Search the roster, check in by subject, and watch session timers"
+        subtitle="Register students, check in by subject, and watch session timers"
         action={
           <Box
             sx={{
@@ -680,7 +765,15 @@ export default function DeskPage() {
         <Autocomplete
           options={rosterOptions}
           value={selected}
-          onChange={(_e, value) => setSelected(value)}
+          inputValue={searchInput}
+          onInputChange={(_e, value, reason) => {
+            setSearchInput(value);
+            if (reason === 'input' && showRegister) setShowRegister(false);
+          }}
+          onChange={(_e, value) => {
+            setSelected(value);
+            if (value) setShowRegister(false);
+          }}
           getOptionLabel={(option) =>
             option.student_number
               ? `${option.name} (ID ${option.student_number})`
@@ -706,9 +799,22 @@ export default function DeskPage() {
               autoFocus
             />
           )}
-          sx={{ mb: 2.5 }}
-          noOptionsText="No matching students on roster"
+          sx={{ mb: noSearchMatch && !showRegister ? 1.5 : 2.5 }}
+          noOptionsText={t('register.noMatchHint')}
         />
+
+        {noSearchMatch && !showRegister && (
+          <Button
+            type="button"
+            variant="contained"
+            fullWidth
+            startIcon={<PersonAddOutlinedIcon />}
+            onClick={openRegisterFromSearch}
+            sx={{ mb: 2.5, minHeight: 48, textTransform: 'none' }}
+          >
+            {t('register.noMatchCta')}
+          </Button>
+        )}
 
         <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
           Here for today
@@ -734,6 +840,16 @@ export default function DeskPage() {
           {submitting ? 'Checking in…' : 'Check in'}
         </Button>
       </Paper>
+
+      {showRegister && (
+        <RegisterPanel
+          key={`${registerHint.firstName}|${registerHint.lastName}|${showRegister}`}
+          onRegistered={handleRegistered}
+          initialFirstName={registerHint.firstName}
+          initialLastName={registerHint.lastName}
+          autoFocusFirstName
+        />
+      )}
 
       <Paper
         elevation={0}
