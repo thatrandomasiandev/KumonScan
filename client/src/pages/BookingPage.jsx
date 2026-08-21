@@ -15,13 +15,8 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { getCenterSlug } from '../api';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
-import {
-  ATOMIC_SUBJECTS,
-  encodeSubjects,
-  labelForSubjects,
-  parseSubjectList,
-  toggleSubjectSelection,
-} from '../subjects';
+import SubjectPicker from '../components/SubjectPicker';
+import { labelForSubjects } from '../subjects';
 
 const DAYS_SHOWN = 14;
 
@@ -449,42 +444,15 @@ export default function BookingPage() {
               </Box>
 
               <Typography variant="labelLarge" component="p" sx={{ mb: 1 }}>
-                3. Subjects (pick up to two)
+                3. Subjects
               </Typography>
-              <Box sx={{ display: 'flex', gap: 0.75, mb: 3, width: '100%' }}>
-                {ATOMIC_SUBJECTS.map((option) => {
-                  const selectedList = parseSubjectList(subjects);
-                  const active = selectedList.includes(option.value);
-                  return (
-                    <Button
-                      key={option.value}
-                      onClick={() => {
-                        const next = encodeSubjects(
-                          toggleSubjectSelection(selectedList, option.value)
-                        );
-                        if (next) setSubjects(next);
-                      }}
-                      variant={active ? 'contained' : 'outlined'}
-                      aria-pressed={active}
-                      sx={{
-                        flex: 1,
-                        minWidth: 0,
-                        minHeight: 44,
-                        px: 0.5,
-                        fontSize: '0.8125rem',
-                        ...(active
-                          ? {
-                              bgcolor: md3Colors.primaryContainer,
-                              color: md3Colors.onPrimaryContainer,
-                              '&:hover': { bgcolor: md3Colors.primaryContainer },
-                            }
-                          : { color: md3Colors.onSurfaceVariant }),
-                      }}
-                    >
-                      {option.label}
-                    </Button>
-                  );
-                })}
+              <Box sx={{ mb: 3 }}>
+                <SubjectPicker
+                  value={subjects}
+                  onChange={(next) => {
+                    if (next) setSubjects(next);
+                  }}
+                />
               </Box>
 
               {error && (

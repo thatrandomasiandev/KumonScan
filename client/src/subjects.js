@@ -64,6 +64,13 @@ export function labelForSubjects(raw) {
   return parts.map((p) => labels[p] || p).join(' · ');
 }
 
+/** Default pair when staff tap the Two subjects shortcut (legacy “both”). */
+export const TWO_SUBJECTS_VALUE = 'math+reading';
+
+export function isTwoSubjects(raw) {
+  return parseSubjectList(raw).length >= 2;
+}
+
 /** Toggle one atomic in a max-2 selection (desk / admin cubes). */
 export function toggleSubjectSelection(currentList, subjectValue) {
   const current = normalizeSubjectList(currentList);

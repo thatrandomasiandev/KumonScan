@@ -36,14 +36,13 @@ import { useSnackbar } from '../components/SnackbarProvider';
 // dropped connection delays them instead of failing them (see client/src/offline/).
 import OfflineStatusChip from '../offline/OfflineStatusChip';
 import { useOfflineQueue } from '../offline/useOfflineQueue';
+import SubjectPicker from '../components/SubjectPicker';
 import { md3Colors, getElevatedSurface, motion, shape } from '../theme';
 import {
-  ATOMIC_SUBJECTS,
   allowanceForSubjects,
   encodeSubjects,
   labelForSubjects,
   parseSubjectList,
-  toggleSubjectSelection,
 } from '../subjects';
 
 // Optional worksheet logging at check-out. Set VITE_DESK_WORKSHEET_LOG=0 to
@@ -132,71 +131,7 @@ function LiveClock({ timezone }) {
 }
 
 function SubjectToggle({ value, onChange, disabled }) {
-  const selected = parseSubjectList(value);
-  const allowance = allowanceForSubjects(selected);
-
-  return (
-    <Box>
-      <Box
-        role="group"
-        aria-label="Subjects for today's visit (pick up to two)"
-        sx={{
-          display: 'flex',
-          gap: 0.75,
-          width: '100%',
-        }}
-      >
-        {ATOMIC_SUBJECTS.map((opt) => {
-          const isOn = selected.includes(opt.value);
-          return (
-            <ToggleButton
-              key={opt.value}
-              value={opt.value}
-              selected={isOn}
-              disabled={disabled}
-              aria-pressed={isOn}
-              aria-label={opt.label}
-              onClick={() => {
-                onChange(encodeSubjects(toggleSubjectSelection(selected, opt.value)) || '');
-              }}
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                px: 0.5,
-                py: 0.75,
-                textTransform: 'none',
-                border: `1px solid ${md3Colors.outlineVariant} !important`,
-                borderRadius: `${shape.medium}px !important`,
-                color: md3Colors.onSurfaceVariant,
-                '&.Mui-selected': {
-                  bgcolor: md3Colors.primaryContainer,
-                  color: md3Colors.onPrimaryContainer,
-                  borderColor: `${md3Colors.primary} !important`,
-                  '&:hover': { bgcolor: md3Colors.primaryContainer },
-                },
-              }}
-            >
-              <Typography
-                variant="labelLarge"
-                component="span"
-                sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}
-              >
-                {opt.label}
-              </Typography>
-            </ToggleButton>
-          );
-        })}
-      </Box>
-      <Typography
-        variant="bodySmall"
-        sx={{ mt: 0.75, color: md3Colors.onSurfaceVariant, display: 'block' }}
-      >
-        {selected.length === 0
-          ? 'Pick one or two subjects'
-          : `${labelForSubjects(selected)} · ${allowance} min`}
-      </Typography>
-    </Box>
-  );
+  return <SubjectPicker value={value} onChange={onChange} disabled={disabled} />;
 }
 
 /** Session timer stages: green until ¾ allowance, yellow to end, red past end. */

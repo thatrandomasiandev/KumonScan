@@ -53,12 +53,11 @@ import ProgressTracker from '../components/ProgressTracker';
 import { useSnackbar } from '../components/SnackbarProvider';
 import { DEFAULT_LANGUAGE, getLanguageOptions } from '../i18n';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
+import SubjectPicker from '../components/SubjectPicker';
 import {
-  ATOMIC_SUBJECTS,
   encodeSubjects,
   labelForSubjects,
   parseSubjectList,
-  toggleSubjectSelection,
 } from '../subjects';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -489,49 +488,14 @@ function StudentScheduleEditor({ student, onSaved }) {
       <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
         Subjects
       </Typography>
-      <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 1, display: 'block' }}>
-        Pick one or two (Math, Reading, EFL)
-      </Typography>
-      <Box
-        role="group"
-        aria-label="Enrolled subjects"
-        sx={{ display: 'flex', gap: 0.75, mb: 2.5, width: '100%' }}
-      >
-        {ATOMIC_SUBJECTS.map((opt) => {
-          const selectedList = parseSubjectList(enrolled);
-          const isOn = selectedList.includes(opt.value);
-          return (
-            <ToggleButton
-              key={opt.value}
-              value={opt.value}
-              selected={isOn}
-              aria-pressed={isOn}
-              aria-label={opt.label}
-              onClick={() => {
-                const next = encodeSubjects(toggleSubjectSelection(selectedList, opt.value));
-                if (next) setEnrolled(next);
-              }}
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                px: 0.5,
-                py: 0.75,
-                textTransform: 'none',
-                border: `1px solid ${md3Colors.outlineVariant} !important`,
-                borderRadius: `${shape.medium}px !important`,
-                color: md3Colors.onSurfaceVariant,
-                fontSize: '0.8125rem',
-                '&.Mui-selected': {
-                  bgcolor: md3Colors.primaryContainer,
-                  color: md3Colors.onPrimaryContainer,
-                  borderColor: `${md3Colors.primary} !important`,
-                },
-              }}
-            >
-              {opt.label}
-            </ToggleButton>
-          );
-        })}
+      <Box sx={{ mb: 2.5 }}>
+        <SubjectPicker
+          value={enrolled}
+          onChange={(next) => {
+            if (next) setEnrolled(next);
+          }}
+          ariaLabel="Enrolled subjects"
+        />
       </Box>
 
       <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
