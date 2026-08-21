@@ -176,34 +176,6 @@ function SubjectToggle({ value, onChange, disabled }) {
   );
 }
 
-function ModeToggle({ value, onChange, disabled }) {
-  return (
-    <ToggleButtonGroup
-      exclusive
-      fullWidth
-      value={value}
-      onChange={(_e, next) => {
-        if (next) onChange(next);
-      }}
-      disabled={disabled}
-      aria-label="Session mode"
-      sx={toggleGroupSx}
-    >
-      <ToggleButton value="in_person" aria-label="In-person session">
-        <Typography variant="labelLarge" component="span">
-          In-person
-        </Typography>
-      </ToggleButton>
-      <ToggleButton value="remote" aria-label="Remote session over Zoom">
-        <VideocamOutlinedIcon sx={{ fontSize: 18, mr: 0.75 }} />
-        <Typography variant="labelLarge" component="span">
-          Remote
-        </Typography>
-      </ToggleButton>
-    </ToggleButtonGroup>
-  );
-}
-
 /** Session timer stages: green until ¾ allowance, yellow to end, red past end. */
 function getFloorDurationTone(elapsedMinutes, allowanceMinutes, isOvertime) {
   if (isOvertime || elapsedMinutes >= allowanceMinutes) {
@@ -383,7 +355,6 @@ export default function DeskPage() {
   const [showRegister, setShowRegister] = useState(false);
   const [registerHint, setRegisterHint] = useState({ firstName: '', lastName: '' });
   const [subjects, setSubjects] = useState('both');
-  const [mode, setMode] = useState('in_person');
   const [remoteSessionIds, setRemoteSessionIds] = useState(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
@@ -591,13 +562,13 @@ export default function DeskPage() {
       };
     setSelected(student);
 
-    // Finish check-in with the subject/mode already chosen above.
+    // Finish check-in with the subject already chosen above.
     setSubmitting(true);
     setError(null);
     try {
       const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
       const outcome = await submitCheckIn(
-        { student_id: student.id, subjects, mode },
+        { student_id: student.id, subjects, mode: 'in_person' },
         `${student.name} check-in`
       );
       if (outcome.status === 'rejected') {
@@ -606,14 +577,11 @@ export default function DeskPage() {
         return;
       }
       if (outcome.status === 'delivered') {
-        showSnackbar(
-          `${outcome.result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
-        );
+        showSnackbar(`${outcome.result.student.name} checked in · ${subjectLabel}`);
       } else {
         showSnackbar(`${student.name} saved — checks in when connection returns`);
       }
       setSelected(null);
-      setMode('in_person');
       await loadData();
     } catch (err) {
       setError(err.message);
@@ -632,7 +600,7 @@ export default function DeskPage() {
     try {
       const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
       const outcome = await submitCheckIn(
-        { student_id: selected.id, subjects, mode },
+        { student_id: selected.id, subjects, mode: 'in_person' },
         `${selected.name} check-in`
       );
       if (outcome.status === 'rejected') {
@@ -641,14 +609,11 @@ export default function DeskPage() {
         return;
       }
       if (outcome.status === 'delivered') {
-        showSnackbar(
-          `${outcome.result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
-        );
+        showSnackbar(`${outcome.result.student.name} checked in · ${subjectLabel}`);
       } else {
         showSnackbar(`${selected.name} saved — checks in when connection returns`);
       }
       setSelected(null);
-      setMode('in_person');
       await loadData();
     } catch (err) {
       setError(err.message);
@@ -802,10 +767,6 @@ export default function DeskPage() {
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
         }}
       >
-        <Typography variant="titleMedium" sx={{ mb: 2 }}>
-          Check in
-        </Typography>
-
         <Autocomplete
           options={rosterOptions}
           value={selected}
@@ -864,14 +825,6 @@ export default function DeskPage() {
           Here for today
         </Typography>
         <SubjectToggle value={subjects} onChange={setSubjects} disabled={submitting} />
-
-        <Typography
-          variant="labelLarge"
-          sx={{ display: 'block', mt: 2, mb: 1, color: md3Colors.onSurfaceVariant }}
-        >
-          Attending
-        </Typography>
-        <ModeToggle value={mode} onChange={setMode} disabled={submitting} />
 
         <Button
           type="submit"
