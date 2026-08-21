@@ -13,9 +13,9 @@ import { formatFullName } from '../utils/names.js';
 import {
   allowanceForSubjects,
   enrichOpenSession,
+  labelForSubjects,
   normalizeSubjects,
   overtimeMinutesDisplay,
-  SUBJECT_LABELS,
 } from '../sessionRules.js';
 import { closeStaleOpenSessions } from '../sessionHygiene.js';
 import {
@@ -44,7 +44,7 @@ router.post('/check-in', requireAdmin, idempotency(), async (req, res) => {
     const subjects = normalizeSubjects(req.body.subjects);
     if (!subjects) {
       return res.status(400).json({
-        error: 'subjects is required (math, reading, or both)',
+        error: 'subjects is required (math, reading, efl, or a pair like math+reading)',
       });
     }
 
@@ -193,7 +193,7 @@ router.post('/check-out', requireAdmin, idempotency(), async (req, res) => {
       },
       session: {
         ...session,
-        subjects_label: SUBJECT_LABELS[session.subjects || 'both'] || 'Both',
+        subjects_label: labelForSubjects(session.subjects || 'math+reading'),
         allowance_minutes: allowance,
         is_overtime: wasOvertime,
         overtime_minutes: overtimeMinutesDisplay(session.duration_minutes, allowance),
@@ -324,7 +324,7 @@ router.get('/completed-today', requireAdmin, async (req, res) => {
     .filter((row) => getDateInTimezone(row.check_out_time) === today);
 
   const students = rows.map((row) => {
-    const subjects = row.subjects || 'both';
+    const subjects = normalizeSubjects(row.subjects) || 'math+reading';
     const allowance = row.allowance_minutes ?? allowanceForSubjects(subjects);
     const duration = row.duration_minutes || 0;
     const isOvertime = duration > allowance;
@@ -339,7 +339,7 @@ router.get('/completed-today', requireAdmin, async (req, res) => {
       check_out_time: row.check_out_time,
       duration_minutes: duration,
       subjects,
-      subjects_label: SUBJECT_LABELS[subjects] || 'Both',
+      subjects_label: labelForSubjects(subjects),
       allowance_minutes: allowance,
       is_overtime: isOvertime,
       overtime_minutes: overtimeMinutesDisplay(duration, allowance),

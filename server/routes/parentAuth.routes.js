@@ -11,7 +11,7 @@ import {
 } from '../services/parentAuthService.js';
 import { getCenterTimezone, isWithinPastDays } from '../timeService.js';
 import { formatFullName } from '../utils/names.js';
-import { SUBJECT_LABELS, allowanceForSubjects } from '../sessionRules.js';
+import { labelForSubjects, allowanceForSubjects } from '../sessionRules.js';
 
 const router = Router();
 
@@ -179,7 +179,7 @@ router.get('/parent/attendance', requireParent, async (req, res) => {
     student: publicStudent(student),
     sessions: sessions.map((s) => ({
       ...s,
-      subjects_label: SUBJECT_LABELS[s.subjects || 'both'] || 'Both',
+      subjects_label: labelForSubjects(s.subjects || 'math+reading'),
       allowance_minutes: s.allowance_minutes ?? allowanceForSubjects(s.subjects || 'both'),
     })),
     stats: {

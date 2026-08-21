@@ -50,7 +50,7 @@ router.post('/check-in', requireAdmin, async (req, res, next) => {
     const subjects = normalizeSubjects(req.body.subjects);
     if (!subjects) {
       return res.status(400).json({
-        error: 'subjects is required (math, reading, or both)',
+        error: 'subjects is required (math, reading, efl, or a pair like math+reading)',
       });
     }
 

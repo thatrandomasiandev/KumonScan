@@ -257,8 +257,8 @@ export async function importRosterFromContent(
       const subjectsCell = String(normalized['subjects'] ?? '').trim();
       const hasSubjectsValue = subjectsCell !== '';
       const enrolled_subjects = hasSubjectsValue
-        ? normalizeSubjects(subjectsCell) || 'both'
-        : 'both';
+        ? normalizeSubjects(subjectsCell) || 'math+reading'
+        : 'math+reading';
 
       const days = parseDaysCell(normalized['days'] ?? '');
       const schedule_days = JSON.stringify(normalizeScheduleDaysInput(days));

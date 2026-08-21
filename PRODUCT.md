@@ -12,9 +12,9 @@ Students are added to the roster from Desk (name only). Touch targets stay at le
 
 ## Product Purpose
 
-KumonScan replaces paper sign-in sheets. Check-in is staff-operated only, from the Desk roster (search by name, last name, or student number; pick Math / Reading / Both) — no kiosk, no student codes, no camera. Each session is stamped from timeapi.io; if timeapi.io is unreachable, check-in and check-out are rejected. Client clocks are never authoritative for session records.
+KumonScan replaces paper sign-in sheets. Check-in is staff-operated only, from the Desk roster (search by name, last name, or student number; pick Math / Reading / EFL, up to two) — no kiosk, no student codes, no camera. Each session is stamped from timeapi.io; if timeapi.io is unreachable, check-in and check-out are rejected. Client clocks are never authoritative for session records.
 
-Session allowance is 30 minutes for one subject and 60 minutes for both. Open sessions on Desk and Admin show elapsed time; when elapsed exceeds the allowance, the student row turns red and shows overage minutes (for example +8 min). Checked-out students move to Completed today with total visit minutes.
+Session allowance is 30 minutes for one subject and 60 minutes for two subjects. Open sessions on Desk and Admin show elapsed time; when elapsed exceeds the allowance, the student row turns red and shows overage minutes (for example +8 min). Checked-out students move to Completed today with total visit minutes.
 
 Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV or PDF (visits, total minutes, overtime count) and charts average check-ins per weekday over the past 28 days against scheduled students.
 

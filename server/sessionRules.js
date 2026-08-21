@@ -1,23 +1,124 @@
 /** Session time allowances and subject validation for desk check-in. */
 
-export const VALID_SUBJECTS = new Set(['math', 'reading', 'both']);
+/** Atomic subjects staff can pick (at most two per visit / enrollment). */
+export const ATOMIC_SUBJECTS = ['math', 'reading', 'efl'];
 
+export const ATOMIC_SUBJECT_LABELS = {
+  math: 'Math',
+  reading: 'Reading',
+  efl: 'EFL',
+};
+
+/** @deprecated Prefer encodeSubjects / parseSubjectList. Kept for call sites that still pass legacy `both`. */
+export const VALID_SUBJECTS = new Set([
+  'math',
+  'reading',
+  'efl',
+  'both',
+  'math+reading',
+  'math+efl',
+  'efl+math',
+  'efl+reading',
+  'reading+efl',
+]);
+
+/**
+ * Human labels for stored subject codes (singles, pairs, and legacy `both`).
+ * Pair keys are sorted alphabetically with `+`.
+ */
 export const SUBJECT_LABELS = {
   math: 'Math',
   reading: 'Reading',
-  both: 'Both',
+  efl: 'EFL',
+  both: 'Math · Reading',
+  'math+reading': 'Math · Reading',
+  'math+efl': 'Math · EFL',
+  'efl+math': 'Math · EFL',
+  'efl+reading': 'Reading · EFL',
+  'reading+efl': 'Reading · EFL',
 };
 
-/** One subject = 30 minutes; both subjects = 60 minutes. */
-export function allowanceForSubjects(subjects) {
-  return subjects === 'both' ? 60 : 30;
+/** Split a stored subjects value into atomic subject codes (0–2). */
+export function parseSubjectList(raw) {
+  if (raw == null || raw === '') return [];
+  if (Array.isArray(raw)) {
+    return normalizeSubjectList(raw);
+  }
+  const value = String(raw).trim().toLowerCase();
+  if (!value) return [];
+  if (value === 'both') return ['math', 'reading'];
+  const parts = value.split(/[+,\s|/]+/).filter(Boolean);
+  return normalizeSubjectList(parts);
 }
 
+/** Dedupe, keep only known atomics, sort, cap at two. */
+export function normalizeSubjectList(list) {
+  const seen = new Set();
+  const out = [];
+  for (const item of list || []) {
+    const v = String(item).trim().toLowerCase();
+    if (v === 'both') {
+      for (const s of ['math', 'reading']) {
+        if (!seen.has(s)) {
+          seen.add(s);
+          out.push(s);
+        }
+      }
+      continue;
+    }
+    if (!ATOMIC_SUBJECTS.includes(v) || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  out.sort((a, b) => ATOMIC_SUBJECTS.indexOf(a) - ATOMIC_SUBJECTS.indexOf(b));
+  return out.slice(0, 2);
+}
+
+/** Canonical DB / API string: one atomic, or `a+b` for a pair. */
+export function encodeSubjects(list) {
+  const normalized = normalizeSubjectList(list);
+  if (normalized.length === 0) return null;
+  if (normalized.length === 1) return normalized[0];
+  return normalized.join('+');
+}
+
+/** Label for a stored or list value. */
+export function labelForSubjects(raw) {
+  const encoded = typeof raw === 'string' ? normalizeSubjects(raw) : encodeSubjects(raw);
+  if (!encoded) return '';
+  if (SUBJECT_LABELS[encoded]) return SUBJECT_LABELS[encoded];
+  return parseSubjectList(encoded)
+    .map((s) => ATOMIC_SUBJECT_LABELS[s] || s)
+    .join(' · ');
+}
+
+/** One subject = 30 minutes; two subjects = 60 minutes. */
+export function allowanceForSubjects(subjects) {
+  const count = parseSubjectList(subjects).length;
+  if (count >= 2) return 60;
+  return 30;
+}
+
+/**
+ * Normalize a client/API subjects value to a canonical stored string, or null if invalid.
+ * Accepts legacy `both` (→ math+reading), singles, and pairs.
+ */
 export function normalizeSubjects(raw) {
   if (raw == null || raw === '') return null;
+  if (Array.isArray(raw)) {
+    const encoded = encodeSubjects(raw);
+    return encoded;
+  }
   const value = String(raw).trim().toLowerCase();
-  if (!VALID_SUBJECTS.has(value)) return null;
-  return value;
+  if (!value) return null;
+  if (value === 'both') return 'math+reading';
+  if (ATOMIC_SUBJECTS.includes(value)) return value;
+  const encoded = encodeSubjects(parseSubjectList(value));
+  if (!encoded) return null;
+  // Reject three-or-more / garbage that parsed empty after filter.
+  const parts = parseSubjectList(value);
+  if (parts.length === 0) return null;
+  return encoded;
 }
 
 /**
@@ -49,13 +150,14 @@ export function overtimeMinutesDisplay(durationMinutes, allowanceMinutes) {
 }
 
 export function enrichOpenSession(row, nowMs = Date.now()) {
-  const allowance = row.allowance_minutes ?? allowanceForSubjects(row.subjects || 'both');
+  const subjects = normalizeSubjects(row.subjects) || 'math+reading';
+  const allowance = row.allowance_minutes ?? allowanceForSubjects(subjects);
   const timing = sessionTiming(row.check_in_time, allowance, nowMs);
 
   return {
     ...row,
-    subjects: row.subjects || 'both',
-    subjects_label: SUBJECT_LABELS[row.subjects || 'both'] || 'Both',
+    subjects,
+    subjects_label: labelForSubjects(subjects),
     ...timing,
   };
 }

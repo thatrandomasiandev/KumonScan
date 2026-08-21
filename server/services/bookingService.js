@@ -282,10 +282,10 @@ export async function createBooking(
   }
 
   const normalizedSubjects = subjects == null || subjects === ''
-    ? 'both'
+    ? 'math+reading'
     : normalizeSubjects(subjects);
   if (!normalizedSubjects) {
-    throw new BookingError(400, 'subjects must be math, reading, or both');
+    throw new BookingError(400, 'subjects must be math, reading, efl, or a pair (e.g. math+reading)');
   }
 
   let studentId = null;

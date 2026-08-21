@@ -15,7 +15,7 @@ import {
   splitFullName,
   validateNameField,
 } from '../utils/names.js';
-import { normalizeSubjects, SUBJECT_LABELS } from '../sessionRules.js';
+import { labelForSubjects, normalizeSubjects } from '../sessionRules.js';
 import {
   serializeStudent,
   getStudentStats,
@@ -136,7 +136,7 @@ router.post('/students', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Name is required' });
   }
 
-  const enrolled_subjects = normalizeSubjects(rawEnrolled) || 'both';
+  const enrolled_subjects = normalizeSubjects(rawEnrolled) || 'math+reading';
 
   let student_number = null;
   if (req.body.student_number !== undefined && req.body.student_number !== null && req.body.student_number !== '') {
@@ -200,7 +200,7 @@ router.patch('/students/:id', requireAdmin, async (req, res) => {
     const enrolled = normalizeSubjects(req.body.enrolled_subjects);
     if (!enrolled) {
       return res.status(400).json({
-        error: 'enrolled_subjects must be math, reading, or both',
+        error: 'enrolled_subjects must be math, reading, efl, or a pair (e.g. math+reading)',
       });
     }
     updates.push('enrolled_subjects = ?');
@@ -362,14 +362,14 @@ router.get('/absent', requireAdmin, async (req, res) => {
   const students = expected
     .filter((student) => !checkedInIds.has(student.id))
     .map((student) => {
-      const subjects = student.enrolled_subjects || 'both';
+      const subjects = normalizeSubjects(student.enrolled_subjects) || 'math+reading';
       return {
         id: student.id,
         first_name: student.first_name,
         last_name: student.last_name,
         name: formatFullName(student),
         enrolled_subjects: subjects,
-        enrolled_subjects_label: SUBJECT_LABELS[subjects] || 'Both',
+        enrolled_subjects_label: labelForSubjects(subjects),
         schedule_days: parseScheduleDays(student.schedule_days),
       };
     });
