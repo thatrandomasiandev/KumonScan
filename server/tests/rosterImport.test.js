@@ -45,7 +45,7 @@ describe('rosterImport', () => {
       )
       .get(center.id);
     expect(parseScheduleDays(row.schedule_days)).toEqual(['Tue', 'Thu']);
-    expect(row.enrolled_subjects).toBe('both');
+    expect(row.enrolled_subjects).toBe('math+reading');
   });
 
   it('does not overwrite subjects when Subjects cell is blank for an existing student', async () => {

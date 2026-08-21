@@ -37,30 +37,14 @@ import { useSnackbar } from '../components/SnackbarProvider';
 import OfflineStatusChip from '../offline/OfflineStatusChip';
 import { useOfflineQueue } from '../offline/useOfflineQueue';
 import { md3Colors, getElevatedSurface, motion, shape } from '../theme';
-
-const SUBJECT_OPTIONS = [
-  { value: 'math', label: 'Math', allowance: 30 },
-  { value: 'reading', label: 'Reading', allowance: 30 },
-  { value: 'both', label: 'Both', allowance: 60 },
-];
-
-const toggleGroupSx = {
-  gap: 1,
-  '& .MuiToggleButtonGroup-grouped': {
-    border: `1px solid ${md3Colors.outlineVariant} !important`,
-    borderRadius: `${shape.medium}px !important`,
-    flex: 1,
-    py: 1.25,
-    textTransform: 'none',
-    color: md3Colors.onSurfaceVariant,
-    '&.Mui-selected': {
-      bgcolor: md3Colors.primaryContainer,
-      color: md3Colors.onPrimaryContainer,
-      borderColor: `${md3Colors.primary} !important`,
-      '&:hover': { bgcolor: md3Colors.primaryContainer },
-    },
-  },
-};
+import {
+  ATOMIC_SUBJECTS,
+  allowanceForSubjects,
+  encodeSubjects,
+  labelForSubjects,
+  parseSubjectList,
+  toggleSubjectSelection,
+} from '../subjects';
 
 // Optional worksheet logging at check-out. Set VITE_DESK_WORKSHEET_LOG=0 to
 // hide the field; logging is best-effort and never blocks the check-out.
@@ -148,31 +132,70 @@ function LiveClock({ timezone }) {
 }
 
 function SubjectToggle({ value, onChange, disabled }) {
+  const selected = parseSubjectList(value);
+  const allowance = allowanceForSubjects(selected);
+
   return (
-    <ToggleButtonGroup
-      exclusive
-      fullWidth
-      value={value}
-      onChange={(_e, next) => {
-        if (next) onChange(next);
-      }}
-      disabled={disabled}
-      aria-label="Subject for today's visit"
-      sx={toggleGroupSx}
-    >
-      {SUBJECT_OPTIONS.map((opt) => (
-        <ToggleButton key={opt.value} value={opt.value} aria-label={`${opt.label}, ${opt.allowance} minutes`}>
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="labelLarge" component="span" sx={{ display: 'block' }}>
-              {opt.label}
-            </Typography>
-            <Typography variant="bodySmall" component="span" sx={{ opacity: 0.8 }}>
-              {opt.allowance} min
-            </Typography>
-          </Box>
-        </ToggleButton>
-      ))}
-    </ToggleButtonGroup>
+    <Box>
+      <Box
+        role="group"
+        aria-label="Subjects for today's visit (pick up to two)"
+        sx={{
+          display: 'flex',
+          gap: 0.75,
+          width: '100%',
+        }}
+      >
+        {ATOMIC_SUBJECTS.map((opt) => {
+          const isOn = selected.includes(opt.value);
+          return (
+            <ToggleButton
+              key={opt.value}
+              value={opt.value}
+              selected={isOn}
+              disabled={disabled}
+              aria-pressed={isOn}
+              aria-label={opt.label}
+              onClick={() => {
+                onChange(encodeSubjects(toggleSubjectSelection(selected, opt.value)) || '');
+              }}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                px: 0.5,
+                py: 0.75,
+                textTransform: 'none',
+                border: `1px solid ${md3Colors.outlineVariant} !important`,
+                borderRadius: `${shape.medium}px !important`,
+                color: md3Colors.onSurfaceVariant,
+                '&.Mui-selected': {
+                  bgcolor: md3Colors.primaryContainer,
+                  color: md3Colors.onPrimaryContainer,
+                  borderColor: `${md3Colors.primary} !important`,
+                  '&:hover': { bgcolor: md3Colors.primaryContainer },
+                },
+              }}
+            >
+              <Typography
+                variant="labelLarge"
+                component="span"
+                sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}
+              >
+                {opt.label}
+              </Typography>
+            </ToggleButton>
+          );
+        })}
+      </Box>
+      <Typography
+        variant="bodySmall"
+        sx={{ mt: 0.75, color: md3Colors.onSurfaceVariant, display: 'block' }}
+      >
+        {selected.length === 0
+          ? 'Pick one or two subjects'
+          : `${labelForSubjects(selected)} · ${allowance} min`}
+      </Typography>
+    </Box>
   );
 }
 
@@ -213,7 +236,7 @@ function getFloorDurationTone(elapsedMinutes, allowanceMinutes, isOvertime) {
 
 function PresentStudentCard({ student, timezone, onCheckOut, checkingOut }) {
   const overtime = student.is_overtime;
-  const allowance = student.allowance_minutes ?? (student.subjects === 'both' ? 60 : 30);
+  const allowance = student.allowance_minutes ?? allowanceForSubjects(student.subjects);
   const tone = getFloorDurationTone(student.elapsed_minutes, allowance, overtime);
   const stageLabel =
     tone.stage === 'end'
@@ -354,7 +377,7 @@ export default function DeskPage() {
   const [searchInput, setSearchInput] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   const [registerHint, setRegisterHint] = useState({ firstName: '', lastName: '' });
-  const [subjects, setSubjects] = useState('both');
+  const [subjects, setSubjects] = useState('math+reading');
   const [remoteSessionIds, setRemoteSessionIds] = useState(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
@@ -383,7 +406,7 @@ export default function DeskPage() {
     const now = Date.now() + clockSkewMs;
     return (present.students || []).map((s) => {
       const elapsed = Math.max(0, Math.floor((now - new Date(s.check_in_time).getTime()) / 60000));
-      const allowance = s.allowance_minutes ?? (s.subjects === 'both' ? 60 : 30);
+      const allowance = s.allowance_minutes ?? allowanceForSubjects(s.subjects);
       const isOvertime = elapsed > allowance;
       return {
         ...s,
@@ -519,9 +542,9 @@ export default function DeskPage() {
 
   useEffect(() => {
     if (!selected) return;
-    const enrolled = selected.enrolled_subjects;
-    if (enrolled === 'math' || enrolled === 'reading' || enrolled === 'both') {
-      setSubjects(enrolled);
+    const enrolled = parseSubjectList(selected.enrolled_subjects);
+    if (enrolled.length > 0) {
+      setSubjects(encodeSubjects(enrolled));
     }
   }, [selected]);
 
@@ -529,7 +552,8 @@ export default function DeskPage() {
   useEffect(() => {
     if (!checkoutTarget) return;
     setWorksheetPage('');
-    setWorksheetSubject(checkoutTarget.subjects === 'reading' ? 'reading' : 'math');
+    const sessionSubjects = parseSubjectList(checkoutTarget.subjects);
+    setWorksheetSubject(sessionSubjects.includes('reading') ? 'reading' : 'math');
   }, [checkoutTarget]);
 
   function openRegisterFromSearch() {
@@ -558,7 +582,7 @@ export default function DeskPage() {
         name: registration.name,
         student_number: registration.student_number,
         active: true,
-        enrolled_subjects: 'both',
+        enrolled_subjects: 'math+reading',
       };
     setSelected(student);
 
@@ -566,9 +590,15 @@ export default function DeskPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
+      const encoded = encodeSubjects(subjects);
+      if (!encoded) {
+        setError('Pick at least one subject');
+        showSnackbar('Pick at least one subject');
+        return;
+      }
+      const subjectLabel = labelForSubjects(encoded);
       const outcome = await submitCheckIn(
-        { student_id: student.id, subjects, mode: 'in_person' },
+        { student_id: student.id, subjects: encoded, mode: 'in_person' },
         `${student.name} check-in`
       );
       if (outcome.status === 'rejected') {
@@ -594,13 +624,19 @@ export default function DeskPage() {
   async function handleCheckIn(e) {
     e.preventDefault();
     if (!selected || submitting) return;
+    const encoded = encodeSubjects(subjects);
+    if (!encoded) {
+      setError('Pick at least one subject');
+      showSnackbar('Pick at least one subject');
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
     try {
-      const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
+      const subjectLabel = labelForSubjects(encoded);
       const outcome = await submitCheckIn(
-        { student_id: selected.id, subjects, mode: 'in_person' },
+        { student_id: selected.id, subjects: encoded, mode: 'in_person' },
         `${selected.name} check-in`
       );
       if (outcome.status === 'rejected') {
@@ -857,7 +893,7 @@ export default function DeskPage() {
           type="submit"
           variant="contained"
           fullWidth
-          disabled={!selected || submitting}
+          disabled={!selected || submitting || parseSubjectList(subjects).length === 0}
           startIcon={<LoginOutlinedIcon />}
           sx={{ mt: 2.5, minHeight: 48 }}
         >

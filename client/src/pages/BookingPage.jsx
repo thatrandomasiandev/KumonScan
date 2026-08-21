@@ -15,14 +15,15 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { getCenterSlug } from '../api';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
+import {
+  ATOMIC_SUBJECTS,
+  encodeSubjects,
+  labelForSubjects,
+  parseSubjectList,
+  toggleSubjectSelection,
+} from '../subjects';
 
 const DAYS_SHOWN = 14;
-
-const SUBJECT_OPTIONS = [
-  { value: 'math', label: 'Math' },
-  { value: 'reading', label: 'Reading' },
-  { value: 'both', label: 'Both' },
-];
 
 async function bookingRequest(path, options = {}) {
   const { headers, ...rest } = options;
@@ -181,7 +182,7 @@ function BookingConfirmation({ booking, phone, onCancelled, onReset }) {
         {[
           ['Day', formatBookingDate(booking.booking_date)],
           ['Name', booking.requester_name],
-          ['Subjects', SUBJECT_OPTIONS.find((s) => s.value === booking.subjects)?.label || 'Both'],
+          ['Subjects', labelForSubjects(booking.subjects) || 'Math · Reading'],
         ].map(([label, value]) => (
           <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
             <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
@@ -247,7 +248,7 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [subjects, setSubjects] = useState('both');
+  const [subjects, setSubjects] = useState('math+reading');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [booking, setBooking] = useState(null);
@@ -448,19 +449,29 @@ export default function BookingPage() {
               </Box>
 
               <Typography variant="labelLarge" component="p" sx={{ mb: 1 }}>
-                3. Subjects
+                3. Subjects (pick up to two)
               </Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, mb: 3 }}>
-                {SUBJECT_OPTIONS.map((option) => {
-                  const active = subjects === option.value;
+              <Box sx={{ display: 'flex', gap: 0.75, mb: 3, width: '100%' }}>
+                {ATOMIC_SUBJECTS.map((option) => {
+                  const selectedList = parseSubjectList(subjects);
+                  const active = selectedList.includes(option.value);
                   return (
                     <Button
                       key={option.value}
-                      onClick={() => setSubjects(option.value)}
+                      onClick={() => {
+                        const next = encodeSubjects(
+                          toggleSubjectSelection(selectedList, option.value)
+                        );
+                        if (next) setSubjects(next);
+                      }}
                       variant={active ? 'contained' : 'outlined'}
                       aria-pressed={active}
                       sx={{
-                        minHeight: 48,
+                        flex: 1,
+                        minWidth: 0,
+                        minHeight: 44,
+                        px: 0.5,
+                        fontSize: '0.8125rem',
                         ...(active
                           ? {
                               bgcolor: md3Colors.primaryContainer,

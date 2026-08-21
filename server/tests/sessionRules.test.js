@@ -1,15 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import {
   allowanceForSubjects,
+  encodeSubjects,
+  labelForSubjects,
+  normalizeSubjects,
   overtimeMinutesDisplay,
+  parseSubjectList,
   sessionTiming,
 } from '../sessionRules.js';
 
 describe('sessionRules', () => {
-  it('allowanceForSubjects: one subject 30, both 60', () => {
+  it('allowanceForSubjects: one subject 30, two subjects 60', () => {
     expect(allowanceForSubjects('math')).toBe(30);
     expect(allowanceForSubjects('reading')).toBe(30);
+    expect(allowanceForSubjects('efl')).toBe(30);
     expect(allowanceForSubjects('both')).toBe(60);
+    expect(allowanceForSubjects('math+reading')).toBe(60);
+    expect(allowanceForSubjects('math+efl')).toBe(60);
+    expect(allowanceForSubjects('efl+reading')).toBe(60);
+  });
+
+  it('normalizeSubjects accepts efl and pairs; maps legacy both', () => {
+    expect(normalizeSubjects('efl')).toBe('efl');
+    expect(normalizeSubjects('both')).toBe('math+reading');
+    expect(normalizeSubjects('math+efl')).toBe('math+efl');
+    expect(normalizeSubjects('reading+math')).toBe('math+reading');
+    expect(normalizeSubjects(['efl', 'math'])).toBe('math+efl');
+    expect(normalizeSubjects('science')).toBeNull();
+  });
+
+  it('encodeSubjects caps at two and labels pairs', () => {
+    expect(encodeSubjects(['math', 'reading', 'efl'])).toBe('math+reading');
+    expect(parseSubjectList('math+efl')).toEqual(['math', 'efl']);
+    expect(labelForSubjects('math+efl')).toBe('Math · EFL');
+    expect(labelForSubjects('both')).toBe('Math · Reading');
   });
 
   it('sessionTiming at exact allowance boundary', () => {

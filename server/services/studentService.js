@@ -37,7 +37,7 @@ export function alreadyCheckedInError(openSession) {
 export function resolveCheckInSubjects(requested, student) {
   const fromRequest = normalizeSubjects(requested);
   if (fromRequest) return fromRequest;
-  return normalizeSubjects(student.enrolled_subjects) || 'both';
+  return normalizeSubjects(student.enrolled_subjects) || 'math+reading';
 }
 
 export async function getOpenSession(centerId, studentId) {
@@ -180,7 +180,7 @@ export function serializeStudent(student) {
   return {
     ...student,
     name: formatFullName(student),
-    enrolled_subjects: student.enrolled_subjects || 'both',
+    enrolled_subjects: normalizeSubjects(student.enrolled_subjects) || 'math+reading',
     schedule_days: parseScheduleDays(student.schedule_days),
     notify_channel: student.notify_channel || 'sms',
   };
