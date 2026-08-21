@@ -99,6 +99,30 @@ describe('student_number (Kumon center ID)', () => {
     expect(cleared.body.student_number).toBeNull();
   });
 
+  it('PATCH /students/:id can rename first and last name', async () => {
+    const created = await request(app)
+      .post('/api/students')
+      .set('Cookie', cookie)
+      .send({ first_name: 'Old', last_name: 'Name' });
+
+    const renamed = await request(app)
+      .patch(`/api/students/${created.body.id}`)
+      .set('Cookie', cookie)
+      .send({ first_name: 'new', last_name: 'student' });
+
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.first_name).toBe('New');
+    expect(renamed.body.last_name).toBe('Student');
+    expect(renamed.body.name).toBe('New Student');
+
+    const bad = await request(app)
+      .patch(`/api/students/${created.body.id}`)
+      .set('Cookie', cookie)
+      .send({ first_name: '   ' });
+
+    expect(bad.status).toBe(400);
+  });
+
   it('list endpoint returns student_number for desk search', async () => {
     const created = await request(app)
       .post('/api/students')

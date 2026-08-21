@@ -292,6 +292,103 @@ function CurrentlyHere({ present, timezone }) {
   );
 }
 
+function EditStudentDialog({ student, open, onClose, onSaved }) {
+  const { showSnackbar } = useSnackbar();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!student || !open) return;
+    setFirstName(student.first_name || '');
+    setLastName(student.last_name || '');
+    setStudentId(student.student_number != null ? String(student.student_number) : '');
+  }, [student, open]);
+
+  if (!student) return null;
+
+  const dirty =
+    firstName.trim() !== (student.first_name || '') ||
+    lastName.trim() !== (student.last_name || '') ||
+    studentId.trim() !== (student.student_number != null ? String(student.student_number) : '');
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (!dirty || saving) return;
+    setSaving(true);
+    try {
+      const payload = {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+      };
+      const trimmedId = studentId.trim();
+      if (trimmedId !== (student.student_number != null ? String(student.student_number) : '')) {
+        payload.student_number = trimmedId === '' ? null : trimmedId;
+      }
+      const updated = await api.updateStudent(student.id, payload);
+      showSnackbar(`Updated ${updated.name}`);
+      onSaved?.(updated);
+      onClose();
+    } catch (err) {
+      showSnackbar(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Edit student</DialogTitle>
+      <Box component="form" onSubmit={handleSave}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
+            Update the child’s name and Kumon student ID. Enrollment and schedule stay on the
+            detail panel below.
+          </Typography>
+          <TextField
+            id="admin-edit-student-first-name"
+            label="First name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            fullWidth
+            autoFocus
+            disabled={saving}
+          />
+          <TextField
+            id="admin-edit-student-last-name"
+            label="Last name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+            fullWidth
+            disabled={saving}
+          />
+          <TextField
+            label="Kumon student ID"
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value.replace(/\D/g, '').slice(0, 13))}
+            placeholder="From CRM roster (optional)"
+            fullWidth
+            inputMode="numeric"
+            disabled={saving}
+            helperText="Official center student number"
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="contained" disabled={!dirty || saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
+  );
+}
+
 function StudentScheduleEditor({ student, onSaved }) {
   const { showSnackbar } = useSnackbar();
   const [studentId, setStudentId] = useState(
@@ -995,6 +1092,7 @@ export default function AdminPage() {
   const [error, setError] = useState(null);
   const [newStudent, setNewStudent] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [editStudentOpen, setEditStudentOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [rosterQuery, setRosterQuery] = useState('');
@@ -1054,6 +1152,7 @@ export default function AdminPage() {
   function selectStudent(student) {
     setSelectedStudent(student);
     setShowAddPanel(false);
+    setEditStudentOpen(false);
   }
 
   function handleRosterSearchKeyDown(e) {
@@ -1625,6 +1724,13 @@ export default function AdminPage() {
                 {selectedStudent.active && (
                   <>
                     <Button
+                      variant="contained"
+                      startIcon={<EditOutlinedIcon />}
+                      onClick={() => setEditStudentOpen(true)}
+                    >
+                      Edit student
+                    </Button>
+                    <Button
                       variant="outlined"
                       onClick={() => setDeactivateTarget(selectedStudent)}
                       sx={{
@@ -1732,6 +1838,18 @@ export default function AdminPage() {
       >
         <AddOutlinedIcon />
       </Fab>
+
+      <EditStudentDialog
+        student={selectedStudent}
+        open={editStudentOpen && Boolean(selectedStudent)}
+        onClose={() => setEditStudentOpen(false)}
+        onSaved={(updated) => {
+          setSelectedStudent(updated);
+          setStudents((prev) =>
+            prev.map((s) => (s.id === updated.id ? { ...s, ...updated, stats: s.stats } : s))
+          );
+        }}
+      />
 
       <Dialog
         open={Boolean(deactivateTarget)}
