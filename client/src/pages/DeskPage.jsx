@@ -805,7 +805,34 @@ export default function DeskPage() {
             />
           )}
           sx={{ mb: noSearchMatch && !showRegister ? 1.5 : 2.5 }}
-          noOptionsText={t('register.noMatchHint')}
+          noOptionsText={
+            searchInput.trim() && !showRegister ? (
+              <Box sx={{ py: 0.5, px: 0.5 }}>
+                <Typography
+                  variant="bodySmall"
+                  sx={{ color: md3Colors.onSurfaceVariant, mb: 1, display: 'block' }}
+                >
+                  {t('register.noMatchHint')}
+                </Typography>
+                <Button
+                  type="button"
+                  variant="contained"
+                  fullWidth
+                  startIcon={<PersonAddOutlinedIcon />}
+                  onMouseDown={(e) => {
+                    // Keep Autocomplete from stealing the click before onClick runs.
+                    e.preventDefault();
+                  }}
+                  onClick={openRegisterFromSearch}
+                  sx={{ minHeight: 44, textTransform: 'none' }}
+                >
+                  {t('register.noMatchCta')}
+                </Button>
+              </Box>
+            ) : (
+              t('register.noMatchHint')
+            )
+          }
         />
 
         {noSearchMatch && !showRegister && (
