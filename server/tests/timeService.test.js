@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   TIME_API_TIMEOUT_MS,
+  dayBounds,
   fetchAuthoritativeTime,
   getWeekdayShortForDate,
   monthBounds,
@@ -22,7 +23,9 @@ describe('timeService', () => {
     expect(getWeekdayShortForDate('2026-11-02')).toBe('Mon');
   });
 
-  it('monthBounds and rollingAnnualBounds at year boundaries', () => {
+  it('monthBounds, dayBounds, and rollingAnnualBounds at year boundaries', () => {
+    expect(dayBounds('2026-08-20')).toEqual({ start: '2026-08-20', end: '2026-08-20' });
+    expect(() => dayBounds('2026-02-30')).toThrow(/YYYY-MM-DD/);
     expect(monthBounds('2026-01')).toEqual({ start: '2026-01-01', end: '2026-01-31' });
     expect(monthBounds('2026-02')).toEqual({ start: '2026-02-01', end: '2026-02-28' });
     expect(rollingAnnualBounds('2026-01')).toEqual({

@@ -80,15 +80,23 @@ export const api = {
     return request(`/absent${qs}`);
   },
 
-  getAttendanceReport: ({ period = 'monthly', month } = {}) => {
+  getAttendanceReport: ({ period = 'monthly', month, date } = {}) => {
     const params = new URLSearchParams({ period });
-    if (month) params.set('month', month);
+    if (period === 'daily') {
+      if (date) params.set('date', date);
+    } else if (month) {
+      params.set('month', month);
+    }
     return request(`/reports/attendance?${params.toString()}`);
   },
 
-  downloadAttendanceCsv: async ({ period = 'monthly', month } = {}) => {
+  downloadAttendanceCsv: async ({ period = 'monthly', month, date } = {}) => {
     const params = new URLSearchParams({ period, format: 'csv' });
-    if (month) params.set('month', month);
+    if (period === 'daily') {
+      if (date) params.set('date', date);
+    } else if (month) {
+      params.set('month', month);
+    }
     const response = await fetch(`${apiBase()}/reports/attendance?${params.toString()}`, {
       credentials: 'include',
     });
@@ -103,9 +111,13 @@ export const api = {
     return { blob, filename };
   },
 
-  downloadAttendancePdf: async ({ period = 'monthly', month } = {}) => {
+  downloadAttendancePdf: async ({ period = 'monthly', month, date } = {}) => {
     const params = new URLSearchParams({ period, format: 'pdf' });
-    if (month) params.set('month', month);
+    if (period === 'daily') {
+      if (date) params.set('date', date);
+    } else if (month) {
+      params.set('month', month);
+    }
     const response = await fetch(`${apiBase()}/reports/attendance?${params.toString()}`, {
       credentials: 'include',
     });
@@ -120,9 +132,13 @@ export const api = {
     return { blob, filename };
   },
 
-  downloadAttendanceXlsx: async ({ period = 'monthly', month } = {}) => {
+  downloadAttendanceXlsx: async ({ period = 'monthly', month, date } = {}) => {
     const params = new URLSearchParams({ period, format: 'xlsx' });
-    if (month) params.set('month', month);
+    if (period === 'daily') {
+      if (date) params.set('date', date);
+    } else if (month) {
+      params.set('month', month);
+    }
     const response = await fetch(`${apiBase()}/reports/attendance?${params.toString()}`, {
       credentials: 'include',
     });
