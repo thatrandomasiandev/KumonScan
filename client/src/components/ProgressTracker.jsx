@@ -23,7 +23,13 @@ const SUBJECTS = [
 const PAGES_PER_LEVEL = 200;
 
 function subjectDefault(enrolled) {
-  return enrolled === 'reading' ? 'reading' : 'math';
+  const value = String(enrolled || '').toLowerCase();
+  if (value === 'reading' || value.includes('reading')) return 'reading';
+  if (value === 'efl' || value.startsWith('efl') || value.endsWith('+efl') || value.includes('+efl')) {
+    // Curriculum catalog is math/reading only; default math when EFL is involved.
+    return 'math';
+  }
+  return 'math';
 }
 
 function CurrentLevelLine({ subject, entry }) {
