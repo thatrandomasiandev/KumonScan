@@ -176,36 +176,51 @@ function SubjectToggle({ value, onChange, disabled }) {
   );
 }
 
-function ModeToggle({ value, onChange, disabled }) {
-  return (
-    <ToggleButtonGroup
-      exclusive
-      fullWidth
-      value={value}
-      onChange={(_e, next) => {
-        if (next) onChange(next);
-      }}
-      disabled={disabled}
-      aria-label="Session mode"
-      sx={toggleGroupSx}
-    >
-      <ToggleButton value="in_person" aria-label="In-person session">
-        <Typography variant="labelLarge" component="span">
-          In-person
-        </Typography>
-      </ToggleButton>
-      <ToggleButton value="remote" aria-label="Remote session over Zoom">
-        <VideocamOutlinedIcon sx={{ fontSize: 18, mr: 0.75 }} />
-        <Typography variant="labelLarge" component="span">
-          Remote
-        </Typography>
-      </ToggleButton>
-    </ToggleButtonGroup>
-  );
+/** Session timer stages: green until ¾ allowance, yellow to end, red past end. */
+function getFloorDurationTone(elapsedMinutes, allowanceMinutes, isOvertime) {
+  if (isOvertime || elapsedMinutes >= allowanceMinutes) {
+    return {
+      stage: 'end',
+      bgcolor: md3Colors.errorContainer,
+      color: md3Colors.onErrorContainer,
+      accent: md3Colors.error,
+      accentContrast: md3Colors.onPrimary,
+      hoverBg: 'color-mix(in srgb, #FFDAD6 85%, #BA1A1A 15%)',
+      muted: 'inherit',
+    };
+  }
+  if (elapsedMinutes >= allowanceMinutes * 0.75) {
+    return {
+      stage: 'threeQuarter',
+      bgcolor: md3Colors.secondaryContainer,
+      color: md3Colors.onSecondaryContainer,
+      accent: md3Colors.secondary,
+      accentContrast: md3Colors.onSecondary,
+      hoverBg: 'color-mix(in srgb, #FFECC2 85%, #F59E0B 15%)',
+      muted: md3Colors.onSecondaryContainer,
+    };
+  }
+  return {
+    stage: 'fresh',
+    bgcolor: md3Colors.successContainer,
+    color: md3Colors.onSurface,
+    accent: md3Colors.success,
+    accentContrast: '#FFFFFF',
+    hoverBg: 'color-mix(in srgb, #C8E6C9 85%, #2E7D32 15%)',
+    muted: md3Colors.onSurfaceVariant,
+  };
 }
 
-function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
+function PresentStudentCard({ student, timezone, onCheckOut, checkingOut }) {
   const overtime = student.is_overtime;
+  const allowance = student.allowance_minutes ?? (student.subjects === 'both' ? 60 : 30);
+  const tone = getFloorDurationTone(student.elapsed_minutes, allowance, overtime);
+  const stageLabel =
+    tone.stage === 'end'
+      ? `, overtime plus ${student.overtime_minutes} minutes`
+      : tone.stage === 'threeQuarter'
+        ? ', approaching session end'
+        : ', recently checked in';
 
   return (
     <Box
@@ -213,22 +228,24 @@ function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
       type="button"
       onClick={() => onCheckOut(student)}
       disabled={checkingOut}
-      aria-label={`Check out ${student.name}${student.is_remote ? ', remote session' : ''}${overtime ? `, overtime plus ${student.overtime_minutes} minutes` : ''}`}
+      aria-label={`Check out ${student.name}${student.is_remote ? ', remote session' : ''}${stageLabel}`}
       sx={{
         display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 0.75,
         width: '100%',
-        p: 1.5,
+        minHeight: 108,
+        p: 1.25,
         border: 'none',
         borderRadius: `${shape.medium}px`,
         textAlign: 'left',
         cursor: checkingOut ? 'wait' : 'pointer',
-        bgcolor: overtime ? md3Colors.errorContainer : 'transparent',
-        color: overtime ? md3Colors.onErrorContainer : md3Colors.onSurface,
+        bgcolor: tone.bgcolor,
+        color: tone.color,
         transition: `background-color ${motion.short2} ${motion.emphasizedDecelerate}`,
         '&:hover': {
-          bgcolor: overtime ? 'color-mix(in srgb, #FFDAD6 85%, #BA1A1A 15%)' : 'rgba(26,27,34,0.04)',
+          bgcolor: tone.hoverBg,
         },
         '&:focus-visible': {
           outline: `2px solid ${md3Colors.primary}`,
@@ -239,89 +256,88 @@ function PresentStudentRow({ student, timezone, onCheckOut, checkingOut }) {
         },
       }}
     >
-      <Box
-        sx={{
-          width: 44,
-          height: 44,
-          borderRadius: `${shape.medium}px`,
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          bgcolor: overtime ? md3Colors.error : md3Colors.tertiaryContainer,
-          color: overtime ? md3Colors.onPrimary : md3Colors.tertiary,
-          fontWeight: 500,
-          fontSize: 14,
-        }}
-      >
-        {student.name
-          .split(' ')
-          .map((p) => p[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase()}
-      </Box>
-
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="titleSmall" noWrap sx={{ color: 'inherit' }}>
-          {student.name}
-        </Typography>
-        <Typography
-          variant="bodySmall"
-          sx={{ color: overtime ? 'inherit' : md3Colors.onSurfaceVariant, opacity: overtime ? 0.85 : 1 }}
-        >
-          {student.subjects_label} · in {formatShortTime(student.check_in_time, timezone)}
-        </Typography>
-      </Box>
-
-      {student.is_remote && (
-        <Chip
-          size="small"
-          icon={<VideocamOutlinedIcon />}
-          label="Remote"
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+        <Box
           sx={{
-            height: 22,
+            width: 32,
+            height: 32,
+            borderRadius: `${shape.small}px`,
             flexShrink: 0,
-            fontWeight: 500,
-            // Neutral on purpose: color in this list is reserved for overtime.
-            bgcolor: 'rgba(26,27,34,0.08)',
-            color: 'inherit',
-            '& .MuiChip-icon': { color: 'inherit', fontSize: 15 },
-          }}
-        />
-      )}
-
-      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-        <Typography
-          variant="titleSmall"
-          sx={{
-            fontFamily: '"Roboto Mono", Roboto, monospace',
-            fontVariantNumeric: 'tabular-nums',
-            color: 'inherit',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: tone.accent,
+            color: tone.accentContrast,
+            fontWeight: 600,
+            fontSize: 11,
+            lineHeight: 1,
           }}
         >
-          {formatDuration(student.elapsed_minutes)}
-        </Typography>
-        {overtime ? (
+          {student.name
+            .split(' ')
+            .map((p) => p[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase()}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
-            variant="labelMedium"
+            variant="labelLarge"
+            noWrap
+            sx={{ color: 'inherit', fontWeight: 600, display: 'block', lineHeight: 1.25 }}
+          >
+            {student.name}
+          </Typography>
+          <Typography
+            variant="bodySmall"
+            noWrap
+            sx={{ color: tone.muted, opacity: tone.stage === 'end' ? 0.85 : 1, display: 'block' }}
+          >
+            {student.subjects_label}
+            {student.is_remote ? ' · Remote' : ''}
+          </Typography>
+        </Box>
+        <LogoutOutlinedIcon sx={{ fontSize: 18, opacity: 0.65, flexShrink: 0, mt: 0.25 }} />
+      </Box>
+
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 0.5, mt: 'auto' }}>
+        <Typography variant="bodySmall" noWrap sx={{ color: tone.muted, opacity: tone.stage === 'end' ? 0.85 : 1 }}>
+          in {formatShortTime(student.check_in_time, timezone)}
+        </Typography>
+        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+          <Typography
+            variant="labelLarge"
             sx={{
-              display: 'block',
-              color: md3Colors.error,
-              fontWeight: 600,
+              fontFamily: '"Roboto Mono", Roboto, monospace',
               fontVariantNumeric: 'tabular-nums',
+              color: 'inherit',
+              fontWeight: 600,
+              display: 'block',
+              lineHeight: 1.2,
             }}
           >
-            +{student.overtime_minutes} min
+            {formatDuration(student.elapsed_minutes)}
           </Typography>
-        ) : (
-          <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
-            / {student.allowance_minutes}m
-          </Typography>
-        )}
+          {overtime ? (
+            <Typography
+              variant="labelMedium"
+              sx={{
+                display: 'block',
+                color: md3Colors.error,
+                fontWeight: 700,
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1.2,
+              }}
+            >
+              +{student.overtime_minutes}m
+            </Typography>
+          ) : (
+            <Typography variant="bodySmall" sx={{ color: tone.muted, lineHeight: 1.2 }}>
+              / {allowance}m
+            </Typography>
+          )}
+        </Box>
       </Box>
-
-      <LogoutOutlinedIcon sx={{ fontSize: 20, opacity: 0.7, flexShrink: 0 }} />
     </Box>
   );
 }
@@ -339,7 +355,6 @@ export default function DeskPage() {
   const [showRegister, setShowRegister] = useState(false);
   const [registerHint, setRegisterHint] = useState({ firstName: '', lastName: '' });
   const [subjects, setSubjects] = useState('both');
-  const [mode, setMode] = useState('in_person');
   const [remoteSessionIds, setRemoteSessionIds] = useState(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
@@ -547,13 +562,13 @@ export default function DeskPage() {
       };
     setSelected(student);
 
-    // Finish check-in with the subject/mode already chosen above.
+    // Finish check-in with the subject already chosen above.
     setSubmitting(true);
     setError(null);
     try {
       const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
       const outcome = await submitCheckIn(
-        { student_id: student.id, subjects, mode },
+        { student_id: student.id, subjects, mode: 'in_person' },
         `${student.name} check-in`
       );
       if (outcome.status === 'rejected') {
@@ -562,14 +577,11 @@ export default function DeskPage() {
         return;
       }
       if (outcome.status === 'delivered') {
-        showSnackbar(
-          `${outcome.result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
-        );
+        showSnackbar(`${outcome.result.student.name} checked in · ${subjectLabel}`);
       } else {
         showSnackbar(`${student.name} saved — checks in when connection returns`);
       }
       setSelected(null);
-      setMode('in_person');
       await loadData();
     } catch (err) {
       setError(err.message);
@@ -588,7 +600,7 @@ export default function DeskPage() {
     try {
       const subjectLabel = SUBJECT_OPTIONS.find((o) => o.value === subjects)?.label;
       const outcome = await submitCheckIn(
-        { student_id: selected.id, subjects, mode },
+        { student_id: selected.id, subjects, mode: 'in_person' },
         `${selected.name} check-in`
       );
       if (outcome.status === 'rejected') {
@@ -597,14 +609,11 @@ export default function DeskPage() {
         return;
       }
       if (outcome.status === 'delivered') {
-        showSnackbar(
-          `${outcome.result.student.name} checked in · ${subjectLabel}${mode === 'remote' ? ' · Remote' : ''}`
-        );
+        showSnackbar(`${outcome.result.student.name} checked in · ${subjectLabel}`);
       } else {
         showSnackbar(`${selected.name} saved — checks in when connection returns`);
       }
       setSelected(null);
-      setMode('in_person');
       await loadData();
     } catch (err) {
       setError(err.message);
@@ -758,10 +767,6 @@ export default function DeskPage() {
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
         }}
       >
-        <Typography variant="titleMedium" sx={{ mb: 2 }}>
-          Check in
-        </Typography>
-
         <Autocomplete
           options={rosterOptions}
           value={selected}
@@ -820,14 +825,6 @@ export default function DeskPage() {
           Here for today
         </Typography>
         <SubjectToggle value={subjects} onChange={setSubjects} disabled={submitting} />
-
-        <Typography
-          variant="labelLarge"
-          sx={{ display: 'block', mt: 2, mb: 1, color: md3Colors.onSurfaceVariant }}
-        >
-          Attending
-        </Typography>
-        <ModeToggle value={mode} onChange={setMode} disabled={submitting} />
 
         <Button
           type="submit"
@@ -974,9 +971,19 @@ export default function DeskPage() {
               </Typography>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: 'repeat(2, minmax(0, 1fr))',
+                  sm: 'repeat(3, minmax(0, 1fr))',
+                  md: 'repeat(4, minmax(0, 1fr))',
+                },
+                gap: 1,
+              }}
+            >
               {activeRoster.map((student) => (
-                <PresentStudentRow
+                <PresentStudentCard
                   key={student.session_id}
                   student={student}
                   timezone={timezone}

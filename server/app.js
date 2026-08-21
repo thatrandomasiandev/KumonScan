@@ -37,8 +37,18 @@ export function createApp() {
 
   // Roster upload is the only large payload; everything else stays small.
   // Twilio posts application/x-www-form-urlencoded, not JSON.
-  const jsonSmall = express.json({ limit: '256kb', verify: captureRawBody });
-  const jsonLarge = express.json({ limit: '8mb' });
+  // Also accept text/plain: some browsers default string fetch bodies to
+  // text/plain;charset=UTF-8 when Content-Type is missing, which left
+  // req.body empty and made /check-in return "student_id is required".
+  const jsonSmall = express.json({
+    limit: '256kb',
+    type: ['application/json', 'text/plain'],
+    verify: captureRawBody,
+  });
+  const jsonLarge = express.json({
+    limit: '8mb',
+    type: ['application/json', 'text/plain'],
+  });
   const urlencodedSmall = express.urlencoded({ extended: false, limit: '256kb' });
   app.use((req, res, next) => {
     if (TWILIO_SMS_WEBHOOK_PATH.test(req.path)) return urlencodedSmall(req, res, next);

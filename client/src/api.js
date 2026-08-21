@@ -20,14 +20,15 @@ function apiBase() {
 }
 
 async function request(path, options = {}) {
-  const { headers, ...rest } = options;
+  const { headers: extraHeaders, ...rest } = options;
+  const headers = new Headers(extraHeaders || undefined);
+  // Always force JSON. Missing Content-Type makes browsers send
+  // text/plain;charset=UTF-8 for string bodies, which Express left unparsed.
+  headers.set('Content-Type', 'application/json');
   const response = await fetch(`${apiBase()}${path}`, {
     credentials: 'include',
     ...rest,
-    // Headers must win over `...rest`. Spreading options after headers
-    // dropped Content-Type whenever check-in/out passed Idempotency-Key,
-    // so Express left req.body empty and returned "student_id is required".
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers,
   });
 
   const data = await response.json().catch(() => ({}));
