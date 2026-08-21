@@ -16,7 +16,7 @@ KumonScan replaces paper sign-in sheets. Check-in is staff-operated only, from t
 
 Session allowance is 30 minutes for one subject and 60 minutes for two subjects. Open sessions on Desk and Admin show elapsed time; when elapsed exceeds the allowance, the student row turns red and shows overage minutes (for example +8 min). Checked-out students move to Completed today with total visit minutes.
 
-Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports monthly or rolling 12-month attendance as CSV or PDF (visits, total minutes, overtime count) and charts average check-ins per weekday over the past 28 days against scheduled students.
+Staff set each student's enrolled subjects and scheduled weekdays in Admin. Desk can generate an absence list for students expected that weekday who never checked in. Dashboard exports daily, monthly, or rolling 12-month attendance as CSV, XLSX, or PDF (visits, total minutes, overtime count) and charts average check-ins per weekday over the past 28 days against scheduled students.
 
 Admin accepts CRM roster upload (TSV/CSV) as the roster sync path: after Personal Orientation enrollments, staff export from the Kumon CRM and upload in Admin (name match updates; new names are created). The standard CRM export has no schedule-day column; Admin bulk schedule apply sets weekdays (MWF / TTh / Mon–Fri or custom) so Desk absences work. Staff can still edit subjects and days per student.
 

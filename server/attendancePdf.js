@@ -14,7 +14,9 @@ export function attendanceReportToPdf(report) {
     const title =
       report.period === 'annual'
         ? 'KumonScan attendance — rolling 12 months'
-        : 'KumonScan attendance — monthly';
+        : report.period === 'daily'
+          ? 'KumonScan attendance — daily'
+          : 'KumonScan attendance — monthly';
 
     doc.fontSize(16).text(title, { underline: false });
     doc.moveDown(0.4);

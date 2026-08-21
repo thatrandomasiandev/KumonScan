@@ -45,20 +45,30 @@ function currentMonthValue() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function currentDateValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 function AttendanceReports() {
   const { showSnackbar } = useSnackbar();
   const [period, setPeriod] = useState('monthly');
   const [month, setMonth] = useState(currentMonthValue);
+  const [date, setDate] = useState(currentDateValue);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingXlsx, setDownloadingXlsx] = useState(false);
 
+  const rangeReady = period === 'daily' ? Boolean(date) : Boolean(month);
+  const reportArgs =
+    period === 'daily' ? { period, date } : { period, month };
+
   async function loadReport() {
     setLoading(true);
     try {
-      const data = await api.getAttendanceReport({ period, month });
+      const data = await api.getAttendanceReport(reportArgs);
       setReport(data);
     } catch (err) {
       showSnackbar(err.message);
@@ -70,7 +80,7 @@ function AttendanceReports() {
   async function handleDownload() {
     setDownloading(true);
     try {
-      const { blob, filename } = await api.downloadAttendanceCsv({ period, month });
+      const { blob, filename } = await api.downloadAttendanceCsv(reportArgs);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -88,7 +98,7 @@ function AttendanceReports() {
   async function handleDownloadPdf() {
     setDownloadingPdf(true);
     try {
-      const { blob, filename } = await api.downloadAttendancePdf({ period, month });
+      const { blob, filename } = await api.downloadAttendancePdf(reportArgs);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -106,7 +116,7 @@ function AttendanceReports() {
   async function handleDownloadXlsx() {
     setDownloadingXlsx(true);
     try {
-      const { blob, filename } = await api.downloadAttendanceXlsx({ period, month });
+      const { blob, filename } = await api.downloadAttendanceXlsx(reportArgs);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -139,7 +149,7 @@ function AttendanceReports() {
           Attendance reports
         </Typography>
         <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 2, display: 'block' }}>
-          Monthly or rolling 12-month export (CSV for Sheets, PDF for print)
+          Daily, monthly, or rolling 12-month export (CSV / XLSX for Sheets, PDF for print)
         </Typography>
 
         <Box
@@ -156,7 +166,10 @@ function AttendanceReports() {
             fullWidth
             value={period}
             onChange={(_e, next) => {
-              if (next) setPeriod(next);
+              if (next) {
+                setPeriod(next);
+                setReport(null);
+              }
             }}
             aria-label="Report period"
             sx={{
@@ -178,6 +191,9 @@ function AttendanceReports() {
               },
             }}
           >
+            <ToggleButton value="daily" sx={{ flex: { xs: 1, sm: 'unset' } }}>
+              Daily
+            </ToggleButton>
             <ToggleButton value="monthly" sx={{ flex: { xs: 1, sm: 'unset' } }}>
               Monthly
             </ToggleButton>
@@ -186,21 +202,33 @@ function AttendanceReports() {
             </ToggleButton>
           </ToggleButtonGroup>
 
-          <TextField
-            label={period === 'annual' ? 'Ending month' : 'Month'}
-            type="month"
-            size="small"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ width: { xs: '100%', sm: 200 } }}
-          />
+          {period === 'daily' ? (
+            <TextField
+              label="Date"
+              type="date"
+              size="small"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: { xs: '100%', sm: 200 } }}
+            />
+          ) : (
+            <TextField
+              label={period === 'annual' ? 'Ending month' : 'Month'}
+              type="month"
+              size="small"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: { xs: '100%', sm: 200 } }}
+            />
+          )}
 
           <Button
             variant="contained"
             fullWidth={false}
             onClick={loadReport}
-            disabled={loading || !month}
+            disabled={loading || !rangeReady}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {loading ? 'Loading…' : 'Preview'}
@@ -209,7 +237,7 @@ function AttendanceReports() {
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownload}
-            disabled={downloading || downloadingPdf || downloadingXlsx || !month}
+            disabled={downloading || downloadingPdf || downloadingXlsx || !rangeReady}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloading ? 'Downloading…' : 'Download CSV'}
@@ -218,7 +246,7 @@ function AttendanceReports() {
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownloadXlsx}
-            disabled={downloading || downloadingPdf || downloadingXlsx || !month}
+            disabled={downloading || downloadingPdf || downloadingXlsx || !rangeReady}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloadingXlsx ? 'Downloading…' : 'Download XLSX'}
@@ -227,7 +255,7 @@ function AttendanceReports() {
             variant="outlined"
             startIcon={<DownloadOutlinedIcon />}
             onClick={handleDownloadPdf}
-            disabled={downloading || downloadingPdf || downloadingXlsx || !month}
+            disabled={downloading || downloadingPdf || downloadingXlsx || !rangeReady}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {downloadingPdf ? 'Downloading…' : 'Download PDF'}

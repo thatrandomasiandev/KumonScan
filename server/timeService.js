@@ -155,6 +155,23 @@ export function normalizeScheduleDaysInput(days) {
   return unique;
 }
 
+/** Inclusive calendar bounds for a single report day in YYYY-MM-DD. */
+export function dayBounds(dateYyyyMmDd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYyyyMmDd)) {
+    throw new Error('date must be YYYY-MM-DD');
+  }
+  const [y, m, d] = dateYyyyMmDd.split('-').map(Number);
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  if (
+    probe.getUTCFullYear() !== y ||
+    probe.getUTCMonth() !== m - 1 ||
+    probe.getUTCDate() !== d
+  ) {
+    throw new Error('date must be YYYY-MM-DD');
+  }
+  return { start: dateYyyyMmDd, end: dateYyyyMmDd };
+}
+
 /** Inclusive calendar bounds (YYYY-MM-DD) for a report month in YYYY-MM. */
 export function monthBounds(monthYyyyMm) {
   if (!/^\d{4}-\d{2}$/.test(monthYyyyMm)) {

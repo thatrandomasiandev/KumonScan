@@ -75,31 +75,40 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
 });
 
 /**
- * Attendance report: ?period=monthly|annual&month=YYYY-MM&format=json|csv|pdf
+ * Attendance report:
+ *   ?period=daily&date=YYYY-MM-DD&format=json|csv|pdf|xlsx
+ *   ?period=monthly|annual&month=YYYY-MM&format=json|csv|pdf|xlsx
  * Annual = rolling 12 months ending in `month`.
  */
 router.get('/reports/attendance', requireAdmin, async (req, res) => {
-  const period = req.query.period === 'annual' ? 'annual' : 'monthly';
+  const period = ['daily', 'annual'].includes(req.query.period) ? req.query.period : 'monthly';
   const now = getTodayInTimezone();
   const month = req.query.month || now.slice(0, 7);
+  const date = req.query.date || now;
   const format = ['csv', 'pdf', 'xlsx'].includes(req.query.format) ? req.query.format : 'json';
+  const rangeLabel = period === 'daily' ? date : month;
 
   let report;
   try {
-    report = await buildAttendanceReport({ centerId: req.center.id, period, month });
+    report = await buildAttendanceReport({
+      centerId: req.center.id,
+      period,
+      month,
+      date,
+    });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
 
   if (format === 'csv') {
-    const filename = `kumonscan-attendance-${period}-${month}.csv`;
+    const filename = `kumonscan-attendance-${period}-${rangeLabel}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(attendanceReportToCsv(report));
   }
 
   if (format === 'xlsx') {
-    const filename = `kumonscan-attendance-${period}-${month}.xlsx`;
+    const filename = `kumonscan-attendance-${period}-${rangeLabel}.xlsx`;
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -111,7 +120,7 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
   if (format === 'pdf') {
     try {
       const pdf = await attendanceReportToPdf(report);
-      const filename = `kumonscan-attendance-${period}-${month}.pdf`;
+      const filename = `kumonscan-attendance-${period}-${rangeLabel}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       return res.send(pdf);
@@ -119,7 +128,7 @@ router.get('/reports/attendance', requireAdmin, async (req, res) => {
       await captureError(err, {
         route: 'GET /api/reports/attendance',
         centerId: req.center?.id,
-        context: { period, month, format: 'pdf' },
+        context: { period, month, date, format: 'pdf' },
       });
       return res.status(500).json({ error: 'Failed to generate PDF' });
     }

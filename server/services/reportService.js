@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import db from '../db.js';
 import {
+  dayBounds,
   getCenterTimezone,
   getDateInTimezone,
   monthBounds,
@@ -26,9 +27,13 @@ export function csvEscape(value) {
   return str;
 }
 
-export async function buildAttendanceReport({ centerId, period, month }) {
+export async function buildAttendanceReport({ centerId, period, month, date }) {
   const bounds =
-    period === 'annual' ? rollingAnnualBounds(month) : monthBounds(month);
+    period === 'daily'
+      ? dayBounds(date)
+      : period === 'annual'
+        ? rollingAnnualBounds(month)
+        : monthBounds(month);
 
   const students = await db
     .prepare('SELECT * FROM students WHERE center_id = ? ORDER BY first_name ASC, last_name ASC')
@@ -75,7 +80,7 @@ export async function buildAttendanceReport({ centerId, period, month }) {
 
   return {
     period,
-    month,
+    ...(period === 'daily' ? { date: bounds.start } : { month }),
     start_date: bounds.start,
     end_date: bounds.end,
     timezone: getCenterTimezone(),
