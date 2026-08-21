@@ -30,6 +30,8 @@ describe('sessionRules', () => {
   });
 
   it('encodeSubjects caps at two and labels pairs', () => {
+    expect(encodeSubjects('math+reading')).toBe('math+reading');
+    expect(encodeSubjects('math')).toBe('math');
     expect(encodeSubjects(['math', 'reading', 'efl'])).toBe('math+reading');
     expect(parseSubjectList('math+efl')).toEqual(['math', 'efl']);
     expect(labelForSubjects('math+efl')).toBe('Math · EFL');

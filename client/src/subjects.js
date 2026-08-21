@@ -43,7 +43,11 @@ export function normalizeSubjectList(list) {
 }
 
 export function encodeSubjects(list) {
-  const normalized = normalizeSubjectList(list);
+  // Strings must go through parseSubjectList — iterating a string character-by-character
+  // would drop every valid subject and yield null (desk "Pick at least one subject").
+  const normalized = typeof list === 'string' || list == null
+    ? parseSubjectList(list)
+    : normalizeSubjectList(list);
   if (normalized.length === 0) return null;
   if (normalized.length === 1) return normalized[0];
   return normalized.join('+');

@@ -76,7 +76,11 @@ export function normalizeSubjectList(list) {
 
 /** Canonical DB / API string: one atomic, or `a+b` for a pair. */
 export function encodeSubjects(list) {
-  const normalized = normalizeSubjectList(list);
+  // Strings must go through parseSubjectList — iterating a string character-by-character
+  // would drop every valid subject and yield null.
+  const normalized = typeof list === 'string' || list == null
+    ? parseSubjectList(list)
+    : normalizeSubjectList(list);
   if (normalized.length === 0) return null;
   if (normalized.length === 1) return normalized[0];
   return normalized.join('+');
