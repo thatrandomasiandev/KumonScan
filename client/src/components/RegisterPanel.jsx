@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Button, Paper, TextField, Typography } from '@mui/material';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import { useTranslation } from 'react-i18next';
@@ -10,12 +10,24 @@ import { md3Colors, shape } from '../theme';
  * student by name, then hands the result to the parent so check-in can
  * continue without leaving Desk.
  */
-export default function RegisterPanel({ onRegistered }) {
+export default function RegisterPanel({
+  onRegistered,
+  initialFirstName = '',
+  initialLastName = '',
+  submitLabel,
+  submittingLabel,
+  autoFocusFirstName = false,
+}) {
   const { t, i18n } = useTranslation();
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState(initialFirstName);
+  const [lastName, setLastName] = useState(initialLastName);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setFirstName(initialFirstName);
+    setLastName(initialLastName);
+  }, [initialFirstName, initialLastName]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -41,6 +53,7 @@ export default function RegisterPanel({ onRegistered }) {
       component="form"
       onSubmit={handleSubmit}
       elevation={0}
+      id="desk-register-panel"
       sx={{
         p: 3,
         mb: 3,
@@ -65,9 +78,9 @@ export default function RegisterPanel({ onRegistered }) {
           <PersonAddOutlinedIcon sx={{ fontSize: 22, color: md3Colors.primary }} />
         </Box>
         <Box>
-          <Typography variant="titleMedium">{t('register.heading')}</Typography>
+          <Typography variant="titleMedium">{t('register.deskHeading')}</Typography>
           <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
-            {t('register.subheading')}
+            {t('register.deskSubheading')}
           </Typography>
         </Box>
       </Box>
@@ -89,6 +102,7 @@ export default function RegisterPanel({ onRegistered }) {
           required
           fullWidth
           disabled={submitting}
+          autoFocus={autoFocusFirstName}
         />
         <TextField
           id="desk-register-last-name"
@@ -104,7 +118,7 @@ export default function RegisterPanel({ onRegistered }) {
         />
         <Button
           type="submit"
-          variant="outlined"
+          variant="contained"
           disabled={submitting}
           startIcon={<PersonAddOutlinedIcon />}
           sx={{
@@ -115,9 +129,29 @@ export default function RegisterPanel({ onRegistered }) {
             alignSelf: { xs: 'stretch', sm: 'flex-start' },
           }}
         >
-          {submitting ? t('register.submitting') : t('register.submit')}
+          {submitting
+            ? submittingLabel || t('register.deskSubmitting')
+            : submitLabel || t('register.deskSubmit')}
         </Button>
       </Box>
     </Paper>
   );
+}
+
+/** Split a free-text desk search into first/last name hints for registration. */
+export function parseNameHint(input) {
+  const trimmed = (input || '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return { firstName: '', lastName: '' };
+
+  // Ignore pure numeric / ID searches — staff still get an empty form.
+  if (/^\d+$/.test(trimmed)) return { firstName: '', lastName: '' };
+
+  if (trimmed.includes(',')) {
+    const [last, ...rest] = trimmed.split(',').map((p) => p.trim()).filter(Boolean);
+    return { firstName: rest.join(' '), lastName: last || '' };
+  }
+
+  const parts = trimmed.split(' ');
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 }
