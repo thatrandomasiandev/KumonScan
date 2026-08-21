@@ -55,7 +55,8 @@ cd server && npm run dev
 cd client && npm run dev
 ```
 
-Open **http://localhost:5173**
+Open **http://localhost:5173** for the app. Port **3001** is the API only during local
+dev (`/api/...`); do not use it as the UI — that was a stale `client/dist` build.
 
 ## Deploy (Vercel + Neon)
 
