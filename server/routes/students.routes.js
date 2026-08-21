@@ -268,6 +268,22 @@ router.patch('/students/:id', requireAdmin, async (req, res) => {
     }
   }
 
+  const renaming =
+    req.body.first_name !== undefined || req.body.last_name !== undefined;
+  if (renaming) {
+    const nextFirst =
+      req.body.first_name !== undefined ? req.body.first_name : student.first_name;
+    const nextLast =
+      req.body.last_name !== undefined ? req.body.last_name : student.last_name;
+    const firstErr = validateNameField(nextFirst, 'First name');
+    if (firstErr) return res.status(400).json({ error: firstErr });
+    const lastErr = validateNameField(nextLast, 'Last name');
+    if (lastErr) return res.status(400).json({ error: lastErr });
+    const { first_name, last_name } = normalizeName(nextFirst, nextLast);
+    updates.push('first_name = ?', 'last_name = ?');
+    values.push(first_name, last_name);
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No valid fields to update' });
   }
