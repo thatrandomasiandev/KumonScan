@@ -765,7 +765,7 @@ export default function DeskPage() {
   if (loading) return <LoadingScreen message="Loading front desk..." />;
 
   return (
-    <Box sx={{ maxWidth: 960, mx: 'auto', px: 2, py: 4, pb: { xs: 12, md: 4 } }}>
+    <Box sx={{ maxWidth: 1280, mx: 'auto', px: 2, py: 4, pb: { xs: 12, md: 4 } }}>
       <PageHeader
         title="Front desk"
         subtitle="Register students, check in by subject, and watch session timers"
@@ -791,273 +791,285 @@ export default function DeskPage() {
         </Typography>
       )}
 
-      <Paper
-        component="form"
-        onSubmit={handleCheckIn}
-        elevation={0}
+      <Box
         sx={{
-          p: 3,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(280px, 380px) minmax(0, 1fr)' },
+          gap: 3,
           mb: 3,
-          borderRadius: `${shape.extraLarge}px`,
-          bgcolor: md3Colors.surfaceBright,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
+          alignItems: 'start',
         }}
       >
-        <Autocomplete
-          options={rosterOptions}
-          value={selected}
-          inputValue={searchInput}
-          onInputChange={(_e, value, reason) => {
-            setSearchInput(value);
-            if (reason === 'input' && showRegister) setShowRegister(false);
-          }}
-          onChange={(_e, value) => {
-            setSelected(value);
-            if (value) setShowRegister(false);
-          }}
-          getOptionLabel={(option) =>
-            option.student_number
-              ? `${option.name} (ID ${option.student_number})`
-              : option.name || ''
-          }
-          isOptionEqualToValue={(a, b) => a.id === b.id}
-          filterOptions={(options, { inputValue }) => {
-            const q = inputValue.trim().toLowerCase();
-            if (!q) return options;
-            return options.filter(
-              (s) =>
-                s.first_name.toLowerCase().includes(q) ||
-                s.last_name.toLowerCase().includes(q) ||
-                s.name.toLowerCase().includes(q) ||
-                String(s.student_number ?? '').includes(q)
-            );
-          }}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Student name or ID"
-              placeholder="Search name or Kumon student ID"
-              autoFocus
-            />
-          )}
-          sx={{ mb: noSearchMatch && !showRegister ? 1.5 : 2.5 }}
-          noOptionsText={
-            searchInput.trim() && !showRegister ? (
-              <Box sx={{ py: 0.5, px: 0.5 }}>
-                <Typography
-                  variant="bodySmall"
-                  sx={{ color: md3Colors.onSurfaceVariant, mb: 1, display: 'block' }}
-                >
-                  {t('register.noMatchHint')}
-                </Typography>
-                <Button
-                  type="button"
-                  variant="contained"
-                  fullWidth
-                  startIcon={<PersonAddOutlinedIcon />}
-                  onMouseDown={(e) => {
-                    // Keep Autocomplete from stealing the click before onClick runs.
-                    e.preventDefault();
-                  }}
-                  onClick={openRegisterFromSearch}
-                  sx={{ minHeight: 44, textTransform: 'none' }}
-                >
-                  {t('register.noMatchCta')}
-                </Button>
-              </Box>
-            ) : (
-              t('register.noMatchHint')
-            )
-          }
-        />
-
-        {noSearchMatch && !showRegister && (
-          <Button
-            type="button"
-            variant="contained"
-            fullWidth
-            startIcon={<PersonAddOutlinedIcon />}
-            onClick={openRegisterFromSearch}
-            sx={{ mb: 2.5, minHeight: 48, textTransform: 'none' }}
-          >
-            {t('register.noMatchCta')}
-          </Button>
-        )}
-
-        <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
-          Here for today
-        </Typography>
-        <SubjectToggle value={subjects} onChange={setSubjects} disabled={submitting} />
-
-        <Button
-          type="submit"
-          variant="contained"
-          fullWidth
-          disabled={!selected || submitting || parseSubjectList(subjects).length === 0}
-          startIcon={<LoginOutlinedIcon />}
-          sx={{ mt: 2.5, minHeight: 48 }}
-        >
-          {submitting ? 'Checking in…' : 'Check in'}
-        </Button>
-      </Paper>
-
-      {showRegister && (
-        <RegisterPanel
-          key={`${registerHint.firstName}|${registerHint.lastName}|${showRegister}`}
-          onRegistered={handleRegistered}
-          initialFirstName={registerHint.firstName}
-          initialLastName={registerHint.lastName}
-          autoFocusFirstName
-        />
-      )}
-
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 3,
-          borderRadius: `${shape.extraLarge}px`,
-          bgcolor: md3Colors.surfaceBright,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
-          overflow: 'hidden',
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 2,
-            px: 3,
-            py: 2.5,
-            bgcolor: overtimeCount > 0 ? md3Colors.errorContainer : md3Colors.tertiaryContainer,
-          }}
-        >
-          <Box>
-            <Typography
-              variant="titleLarge"
-              sx={{ color: overtimeCount > 0 ? md3Colors.error : md3Colors.tertiary }}
-            >
-              On the floor
-            </Typography>
-            <Typography
-              variant="bodySmall"
-              sx={{
-                color: overtimeCount > 0 ? md3Colors.onErrorContainer : md3Colors.onSurfaceVariant,
-                mt: 0.25,
-              }}
-            >
-              Tap a name to check out
-              {overtimeCount > 0 ? ` · ${overtimeCount} over time` : ''}
-            </Typography>
-            {!online && (
-              <Typography
-                variant="bodySmall"
-                sx={{
-                  display: 'block',
-                  mt: 0.25,
-                  fontWeight: 600,
-                  color: overtimeCount > 0 ? md3Colors.onErrorContainer : md3Colors.onSurfaceVariant,
-                }}
-              >
-                Offline — roster as of{' '}
-                {lastSyncedAt ? formatShortTime(lastSyncedAt.toISOString(), timezone) : '—'}, may be
-                out of date
-              </Typography>
-            )}
-            {(present.expected_today != null || present.capacity_today != null) && (
-              <Typography
-                variant="bodySmall"
-                sx={{
-                  display: 'block',
-                  mt: 0.25,
-                  fontWeight:
-                    present.capacity_today != null && activeRoster.length > present.capacity_today
-                      ? 600
-                      : 400,
-                  color:
-                    present.capacity_today != null && activeRoster.length > present.capacity_today
-                      ? md3Colors.error
-                      : overtimeCount > 0
-                        ? md3Colors.onErrorContainer
-                        : md3Colors.onSurfaceVariant,
-                }}
-              >
-                {[
-                  present.expected_today != null ? `${present.expected_today} expected today` : null,
-                  present.capacity_today != null ? `capacity ${present.capacity_today}` : null,
-                  present.capacity_today != null && activeRoster.length > present.capacity_today
-                    ? 'over capacity'
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Typography>
-            )}
-          </Box>
-          <Box
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <Paper
+            component="form"
+            onSubmit={handleCheckIn}
+            elevation={0}
             sx={{
-              minWidth: 56,
-              height: 56,
-              borderRadius: `${shape.large}px`,
+              p: 3,
+              borderRadius: `${shape.extraLarge}px`,
               bgcolor: md3Colors.surfaceBright,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
             }}
           >
-            <Typography
-              variant="headlineMedium"
-              sx={{
-                color: overtimeCount > 0 ? md3Colors.error : md3Colors.tertiary,
-                fontWeight: 500,
+            <Autocomplete
+              options={rosterOptions}
+              value={selected}
+              inputValue={searchInput}
+              onInputChange={(_e, value, reason) => {
+                setSearchInput(value);
+                if (reason === 'input' && showRegister) setShowRegister(false);
               }}
-            >
-              {activeRoster.length}
-            </Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ p: 1.5 }}>
-          {activeRoster.length === 0 ? (
-            <Box
-              sx={{
-                textAlign: 'center',
-                py: 5,
-                px: 2,
-                borderRadius: `${shape.large}px`,
-                bgcolor: md3Colors.surfaceVariant,
+              onChange={(_e, value) => {
+                setSelected(value);
+                if (value) setShowRegister(false);
               }}
-            >
-              <PersonOutlinedIcon sx={{ fontSize: 40, color: md3Colors.outline, mb: 1 }} />
-              <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
-                Floor is clear — check in the next student above
-              </Typography>
-            </Box>
-          ) : (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: 'repeat(2, minmax(0, 1fr))',
-                  sm: 'repeat(3, minmax(0, 1fr))',
-                  md: 'repeat(4, minmax(0, 1fr))',
-                },
-                gap: 1,
+              getOptionLabel={(option) =>
+                option.student_number
+                  ? `${option.name} (ID ${option.student_number})`
+                  : option.name || ''
+              }
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              filterOptions={(options, { inputValue }) => {
+                const q = inputValue.trim().toLowerCase();
+                if (!q) return options;
+                return options.filter(
+                  (s) =>
+                    s.first_name.toLowerCase().includes(q) ||
+                    s.last_name.toLowerCase().includes(q) ||
+                    s.name.toLowerCase().includes(q) ||
+                    String(s.student_number ?? '').includes(q)
+                );
               }}
-            >
-              {activeRoster.map((student) => (
-                <PresentStudentCard
-                  key={student.session_id}
-                  student={student}
-                  timezone={timezone}
-                  onCheckOut={setCheckoutTarget}
-                  checkingOut={checkingOut}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Student name or ID"
+                  placeholder="Search name or Kumon student ID"
+                  autoFocus
                 />
-              ))}
-            </Box>
+              )}
+              sx={{ mb: noSearchMatch && !showRegister ? 1.5 : 2.5 }}
+              noOptionsText={
+                searchInput.trim() && !showRegister ? (
+                  <Box sx={{ py: 0.5, px: 0.5 }}>
+                    <Typography
+                      variant="bodySmall"
+                      sx={{ color: md3Colors.onSurfaceVariant, mb: 1, display: 'block' }}
+                    >
+                      {t('register.noMatchHint')}
+                    </Typography>
+                    <Button
+                      type="button"
+                      variant="contained"
+                      fullWidth
+                      startIcon={<PersonAddOutlinedIcon />}
+                      onMouseDown={(e) => {
+                        // Keep Autocomplete from stealing the click before onClick runs.
+                        e.preventDefault();
+                      }}
+                      onClick={openRegisterFromSearch}
+                      sx={{ minHeight: 44, textTransform: 'none' }}
+                    >
+                      {t('register.noMatchCta')}
+                    </Button>
+                  </Box>
+                ) : (
+                  t('register.noMatchHint')
+                )
+              }
+            />
+
+            {noSearchMatch && !showRegister && (
+              <Button
+                type="button"
+                variant="contained"
+                fullWidth
+                startIcon={<PersonAddOutlinedIcon />}
+                onClick={openRegisterFromSearch}
+                sx={{ mb: 2.5, minHeight: 48, textTransform: 'none' }}
+              >
+                {t('register.noMatchCta')}
+              </Button>
+            )}
+
+            <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
+              Here for today
+            </Typography>
+            <SubjectToggle value={subjects} onChange={setSubjects} disabled={submitting} />
+
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={!selected || submitting || parseSubjectList(subjects).length === 0}
+              startIcon={<LoginOutlinedIcon />}
+              sx={{ mt: 2.5, minHeight: 48 }}
+            >
+              {submitting ? 'Checking in…' : 'Check in'}
+            </Button>
+          </Paper>
+
+          {showRegister && (
+            <RegisterPanel
+              key={`${registerHint.firstName}|${registerHint.lastName}|${showRegister}`}
+              onRegistered={handleRegistered}
+              initialFirstName={registerHint.firstName}
+              initialLastName={registerHint.lastName}
+              autoFocusFirstName
+            />
           )}
         </Box>
-      </Paper>
+
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: `${shape.extraLarge}px`,
+            bgcolor: md3Colors.surfaceBright,
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.04)',
+            overflow: 'hidden',
+            minWidth: 0,
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              px: 3,
+              py: 2.5,
+              bgcolor: overtimeCount > 0 ? md3Colors.errorContainer : md3Colors.tertiaryContainer,
+            }}
+          >
+            <Box>
+              <Typography
+                variant="titleLarge"
+                sx={{ color: overtimeCount > 0 ? md3Colors.error : md3Colors.tertiary }}
+              >
+                On the floor
+              </Typography>
+              <Typography
+                variant="bodySmall"
+                sx={{
+                  color: overtimeCount > 0 ? md3Colors.onErrorContainer : md3Colors.onSurfaceVariant,
+                  mt: 0.25,
+                }}
+              >
+                Tap a name to check out
+                {overtimeCount > 0 ? ` · ${overtimeCount} over time` : ''}
+              </Typography>
+              {!online && (
+                <Typography
+                  variant="bodySmall"
+                  sx={{
+                    display: 'block',
+                    mt: 0.25,
+                    fontWeight: 600,
+                    color: overtimeCount > 0 ? md3Colors.onErrorContainer : md3Colors.onSurfaceVariant,
+                  }}
+                >
+                  Offline — roster as of{' '}
+                  {lastSyncedAt ? formatShortTime(lastSyncedAt.toISOString(), timezone) : '—'}, may be
+                  out of date
+                </Typography>
+              )}
+              {(present.expected_today != null || present.capacity_today != null) && (
+                <Typography
+                  variant="bodySmall"
+                  sx={{
+                    display: 'block',
+                    mt: 0.25,
+                    fontWeight:
+                      present.capacity_today != null && activeRoster.length > present.capacity_today
+                        ? 600
+                        : 400,
+                    color:
+                      present.capacity_today != null && activeRoster.length > present.capacity_today
+                        ? md3Colors.error
+                        : overtimeCount > 0
+                          ? md3Colors.onErrorContainer
+                          : md3Colors.onSurfaceVariant,
+                  }}
+                >
+                  {[
+                    present.expected_today != null ? `${present.expected_today} expected today` : null,
+                    present.capacity_today != null ? `capacity ${present.capacity_today}` : null,
+                    present.capacity_today != null && activeRoster.length > present.capacity_today
+                      ? 'over capacity'
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Typography>
+              )}
+            </Box>
+            <Box
+              sx={{
+                minWidth: 56,
+                height: 56,
+                borderRadius: `${shape.large}px`,
+                bgcolor: md3Colors.surfaceBright,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Typography
+                variant="headlineMedium"
+                sx={{
+                  color: overtimeCount > 0 ? md3Colors.error : md3Colors.tertiary,
+                  fontWeight: 500,
+                }}
+              >
+                {activeRoster.length}
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box sx={{ p: 1.5 }}>
+            {activeRoster.length === 0 ? (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 5,
+                  px: 2,
+                  borderRadius: `${shape.large}px`,
+                  bgcolor: md3Colors.surfaceVariant,
+                }}
+              >
+                <PersonOutlinedIcon sx={{ fontSize: 40, color: md3Colors.outline, mb: 1 }} />
+                <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
+                  Floor is clear — check in the next student
+                </Typography>
+              </Box>
+            ) : (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'repeat(2, minmax(0, 1fr))',
+                    sm: 'repeat(3, minmax(0, 1fr))',
+                    md: 'repeat(2, minmax(0, 1fr))',
+                    lg: 'repeat(3, minmax(0, 1fr))',
+                  },
+                  gap: 1,
+                }}
+              >
+                {activeRoster.map((student) => (
+                  <PresentStudentCard
+                    key={student.session_id}
+                    student={student}
+                    timezone={timezone}
+                    onCheckOut={setCheckoutTarget}
+                    checkingOut={checkingOut}
+                  />
+                ))}
+              </Box>
+            )}
+          </Box>
+        </Paper>
+      </Box>
 
       <Paper
         elevation={0}
