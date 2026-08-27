@@ -1,8 +1,0 @@
-{
-  "_meta": {
-    "nativeName": "English",
-    "intlLocale": "en-US"
-  },
-  "checked_in": "{{name}} checked in at Kumon at {{time}}.",
-  "checked_out": "{{name}} has finished at Kumon and is ready for pickup ({{time}})."
-}

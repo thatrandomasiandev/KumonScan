@@ -24,8 +24,10 @@ import {
   parseStudentNumber,
 } from '../services/studentService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
-import { getSupportedLanguages } from '../services/i18nService.js';
 import { getAuthoritativeTimeOr503 } from './shared.js';
+
+/** Languages accepted for students.preferred_language (registration UI i18n). */
+const SUPPORTED_LANGUAGES = ['en', 'es'];
 
 const router = Router();
 
@@ -226,32 +228,13 @@ router.patch('/students/:id', requireAdmin, async (req, res) => {
     values.push(phone == null || phone.trim() === '' ? null : phone.trim());
   }
 
-  if (req.body.notify_channel !== undefined) {
-    const channel = req.body.notify_channel;
-    if (channel !== 'sms' && channel !== 'whatsapp') {
-      return res.status(400).json({ error: "notify_channel must be 'sms' or 'whatsapp'" });
-    }
-    updates.push('notify_channel = ?');
-    values.push(channel);
-  }
-
-  if (req.body.parent_whatsapp !== undefined) {
-    const whatsapp = req.body.parent_whatsapp;
-    if (whatsapp !== null && typeof whatsapp !== 'string') {
-      return res.status(400).json({ error: 'parent_whatsapp must be a string or null' });
-    }
-    updates.push('parent_whatsapp = ?');
-    values.push(whatsapp == null || whatsapp.trim() === '' ? null : whatsapp.trim());
-  }
-
   if (req.body.preferred_language !== undefined) {
     const raw = req.body.preferred_language;
     // Admin edits come from a dropdown of supported languages, so anything
     // else is a client bug; reject instead of silently coercing to 'en'.
-    const supported = getSupportedLanguages();
-    if (typeof raw !== 'string' || !supported.includes(raw.trim().toLowerCase())) {
+    if (typeof raw !== 'string' || !SUPPORTED_LANGUAGES.includes(raw.trim().toLowerCase())) {
       return res.status(400).json({
-        error: `preferred_language must be one of: ${supported.join(', ')}`,
+        error: `preferred_language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}`,
       });
     }
     updates.push('preferred_language = ?');

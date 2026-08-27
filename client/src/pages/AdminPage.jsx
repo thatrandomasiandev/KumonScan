@@ -32,7 +32,6 @@ import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
-import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -40,7 +39,6 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ClearOutlinedIcon from '@mui/icons-material/ClearOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
-import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import { api, formatTime, formatDuration } from '../api';
 import PrivacySettings, { StudentPrivacyActions } from '../components/PrivacySettings';
 import PageHeader from '../components/PageHeader';
@@ -400,8 +398,6 @@ function StudentScheduleEditor({ student, onSaved }) {
   );
   const [days, setDays] = useState(() => student.schedule_days || []);
   const [phone, setPhone] = useState(student.parent_phone || '');
-  const [notifyChannel, setNotifyChannel] = useState(student.notify_channel || 'sms');
-  const [whatsapp, setWhatsapp] = useState(student.parent_whatsapp || '');
   const [language, setLanguage] = useState(student.preferred_language || DEFAULT_LANGUAGE);
   const [saving, setSaving] = useState(false);
 
@@ -410,8 +406,6 @@ function StudentScheduleEditor({ student, onSaved }) {
     setEnrolled(encodeSubjects(parseSubjectList(student.enrolled_subjects)) || 'math+reading');
     setDays(student.schedule_days || []);
     setPhone(student.parent_phone || '');
-    setNotifyChannel(student.notify_channel || 'sms');
-    setWhatsapp(student.parent_whatsapp || '');
     setLanguage(student.preferred_language || DEFAULT_LANGUAGE);
   }, [
     student.id,
@@ -419,8 +413,6 @@ function StudentScheduleEditor({ student, onSaved }) {
     student.enrolled_subjects,
     student.schedule_days,
     student.parent_phone,
-    student.notify_channel,
-    student.parent_whatsapp,
     student.preferred_language,
   ]);
 
@@ -430,8 +422,6 @@ function StudentScheduleEditor({ student, onSaved }) {
     JSON.stringify([...(days || [])].sort()) !==
       JSON.stringify([...(student.schedule_days || [])].sort()) ||
     phone.trim() !== (student.parent_phone || '') ||
-    notifyChannel !== (student.notify_channel || 'sms') ||
-    whatsapp.trim() !== (student.parent_whatsapp || '') ||
     language !== (student.preferred_language || DEFAULT_LANGUAGE);
 
   function toggleDay(day) {
@@ -445,8 +435,6 @@ function StudentScheduleEditor({ student, onSaved }) {
         enrolled_subjects: enrolled,
         schedule_days: days,
         parent_phone: phone.trim() || null,
-        notify_channel: notifyChannel,
-        parent_whatsapp: whatsapp.trim() || null,
         preferred_language: language,
       };
       const trimmedId = studentId.trim();
@@ -539,60 +527,9 @@ function StudentScheduleEditor({ student, onSaved }) {
             <PhoneOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
           ),
         }}
-        helperText="Used for SMS check-in/check-out notifications and staff messages."
+        helperText="Optional staff contact number. Not used for automated messages."
         sx={{ mb: 2.5 }}
       />
-
-      <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
-        Notification channel
-      </Typography>
-      <ToggleButtonGroup
-        exclusive
-        fullWidth
-        value={notifyChannel}
-        onChange={(_e, next) => {
-          if (next) setNotifyChannel(next);
-        }}
-        aria-label="Notification channel"
-        sx={{
-          mb: 2.5,
-          gap: 1,
-          '& .MuiToggleButtonGroup-grouped': {
-            border: `1px solid ${md3Colors.outlineVariant} !important`,
-            borderRadius: `${shape.medium}px !important`,
-            flex: 1,
-            textTransform: 'none',
-            py: 1,
-            color: md3Colors.onSurfaceVariant,
-            '&.Mui-selected': {
-              bgcolor: md3Colors.primaryContainer,
-              color: md3Colors.onPrimaryContainer,
-              borderColor: `${md3Colors.primary} !important`,
-            },
-          },
-        }}
-      >
-        <ToggleButton value="sms">SMS</ToggleButton>
-        <ToggleButton value="whatsapp">WhatsApp</ToggleButton>
-      </ToggleButtonGroup>
-
-      {notifyChannel === 'whatsapp' && (
-        <TextField
-          value={whatsapp}
-          onChange={(e) => setWhatsapp(e.target.value)}
-          placeholder="e.g. +1 213 555 0100"
-          fullWidth
-          size="small"
-          inputProps={{ inputMode: 'tel' }}
-          InputProps={{
-            startAdornment: (
-              <WhatsAppIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
-            ),
-          }}
-          helperText="WhatsApp number (may differ from the phone above). If empty, notifications fall back to SMS."
-          sx={{ mb: 2.5 }}
-        />
-      )}
 
       <Typography variant="labelLarge" sx={{ display: 'block', mb: 1, color: md3Colors.onSurfaceVariant }}>
         Family language
@@ -608,7 +545,7 @@ function StudentScheduleEditor({ student, onSaved }) {
             <LanguageOutlinedIcon sx={{ fontSize: 18, color: md3Colors.onSurfaceVariant, mr: 1 }} />
           ),
         }}
-        helperText="Language for parent notifications (pickup texts) and the registration page."
+        helperText="Language for the registration page UI."
         sx={{ mb: 3 }}
       >
         {getLanguageOptions().map((opt) => (
@@ -881,187 +818,6 @@ function StudentSessionHistory({ student, timezone }) {
         </DialogActions>
       </Dialog>
     </Box>
-  );
-}
-
-const DIGEST_STATUS_STYLES = {
-  sent: { label: 'Sent', bgcolor: md3Colors.tertiaryContainer, color: md3Colors.tertiary },
-  pending: { label: 'Awaiting channel', bgcolor: md3Colors.surfaceVariant, color: md3Colors.onSurfaceVariant },
-  failed: { label: 'Failed', bgcolor: md3Colors.errorContainer, color: md3Colors.onErrorContainer },
-  skipped_no_contact: { label: 'No contact', bgcolor: 'transparent', color: md3Colors.onSurfaceVariant },
-};
-
-function DigestStatusChip({ status }) {
-  const style = DIGEST_STATUS_STYLES[status] || {
-    label: status,
-    bgcolor: md3Colors.surfaceVariant,
-    color: md3Colors.onSurfaceVariant,
-  };
-  return (
-    <Chip
-      size="small"
-      label={style.label}
-      variant={status === 'skipped_no_contact' ? 'outlined' : 'filled'}
-      sx={{ bgcolor: style.bgcolor, color: style.color, fontWeight: 500 }}
-    />
-  );
-}
-
-function ProgressDigestsSection({ timezone }) {
-  const { showSnackbar } = useSnackbar();
-  const [digests, setDigests] = useState(null);
-  const [filter, setFilter] = useState('');
-  const [sending, setSending] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api.getDigests();
-      setDigests(data.digests || []);
-    } catch (err) {
-      showSnackbar(err.message);
-      setDigests([]);
-    }
-  }, [showSnackbar]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function handleSendNow() {
-    setSending(true);
-    try {
-      const result = await api.sendDigestsNow();
-      const c = result.counts || {};
-      showSnackbar(
-        `Digests for ${result.period_start} to ${result.period_end}: ` +
-          `${c.sent || 0} sent, ${c.pending_no_channel || 0} awaiting channel, ` +
-          `${c.skipped_no_contact || 0} no contact, ${c.skipped_duplicate || 0} already generated, ` +
-          `${c.failed || 0} failed`
-      );
-      await load();
-    } catch (err) {
-      showSnackbar(err.message);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  const visible = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!digests) return [];
-    if (!q) return digests;
-    return digests.filter((d) => d.student_name.toLowerCase().includes(q));
-  }, [digests, filter]);
-
-  const awaitingChannel = useMemo(
-    () => (digests || []).some((d) => d.status === 'pending'),
-    [digests]
-  );
-
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        mt: 3,
-        p: 3,
-        borderRadius: `${shape.large}px`,
-        bgcolor: getElevatedSurface(1),
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1 }}>
-        <Typography variant="titleMedium" sx={{ flex: 1, minWidth: 200 }}>
-          Progress Digests
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={sending ? <CircularProgress size={16} color="inherit" /> : <SendOutlinedIcon />}
-          onClick={handleSendNow}
-          disabled={sending}
-        >
-          {sending ? 'Sending…' : 'Send now'}
-        </Button>
-      </Box>
-      <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, mb: 2, display: 'block' }}>
-        Weekly attendance summaries for parents, generated every Monday for the completed
-        Mon–Sun week. Re-running a week never double-sends.
-        {awaitingChannel &&
-          ' Delivery is blocked until an SMS or WhatsApp channel is installed; digests are generated and logged in the meantime.'}
-      </Typography>
-
-      <TextField
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        placeholder="Filter by student name"
-        size="small"
-        fullWidth
-        sx={{ mb: 2 }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchOutlinedIcon sx={{ fontSize: 20, color: md3Colors.onSurfaceVariant }} />
-            </InputAdornment>
-          ),
-        }}
-      />
-
-      {digests === null ? (
-        <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant, py: 2 }}>
-          Loading…
-        </Typography>
-      ) : visible.length === 0 ? (
-        <Box
-          sx={{
-            textAlign: 'center',
-            py: 4,
-            px: 2,
-            borderRadius: `${shape.medium}px`,
-            bgcolor: md3Colors.surfaceVariant,
-          }}
-        >
-          <Typography variant="bodyMedium" sx={{ color: md3Colors.onSurfaceVariant }}>
-            {digests.length === 0
-              ? 'No digests yet. The Monday cron or the Send now button creates the first batch.'
-              : `No digests match “${filter.trim()}”`}
-          </Typography>
-        </Box>
-      ) : (
-        <Box
-          sx={{
-            border: `1px solid ${md3Colors.outlineVariant}`,
-            borderRadius: `${shape.medium}px`,
-            overflow: 'hidden',
-          }}
-        >
-          {visible.map((digest, i) => (
-            <Box
-              key={digest.id}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                px: 2,
-                py: 1.25,
-                borderBottom: i < visible.length - 1 ? `1px solid ${md3Colors.outlineVariant}` : 'none',
-              }}
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="titleSmall" noWrap>
-                  {digest.student_name}
-                </Typography>
-                <Typography variant="bodySmall" sx={{ color: md3Colors.onSurfaceVariant }}>
-                  Week {digest.period_start} to {digest.period_end}
-                  {digest.status === 'sent' && digest.sent_at
-                    ? ` · sent ${formatTime(digest.sent_at, timezone)} via ${digest.channel}`
-                    : ''}
-                </Typography>
-              </Box>
-              <DigestStatusChip status={digest.status} />
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Paper>
   );
 }
 
@@ -1793,8 +1549,6 @@ export default function AdminPage() {
           )}
         </Box>
       </Box>
-
-      <ProgressDigestsSection timezone={present?.timezone} />
 
       <Fab
         color="primary"

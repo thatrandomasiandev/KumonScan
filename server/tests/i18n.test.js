@@ -4,15 +4,6 @@ import app from '../app.js';
 import db from '../db.js';
 import { clearAdminSessionsForTests } from '../middleware/auth.js';
 import {
-  DEFAULT_LANGUAGE,
-  composeAttendanceNotification,
-  getAllTemplatesForTests,
-  getSupportedLanguages,
-  getTemplate,
-  renderTemplate,
-  resolveLanguage,
-} from '../services/i18nService.js';
-import {
   DEFAULT_ADMIN_PASSWORD,
   defaultCenter,
   insertStudent,
@@ -29,88 +20,6 @@ function stubTimeApi(iso = '2026-07-30T19:00:00.000Z') {
     return realFetch(url, options);
   });
 }
-
-describe('i18nService template lookup', () => {
-  it('supports en and es, with en as the default', () => {
-    const supported = getSupportedLanguages();
-    expect(supported).toContain('en');
-    expect(supported).toContain('es');
-    expect(supported[0]).toBe(DEFAULT_LANGUAGE);
-  });
-
-  it('returns the Spanish template for es', () => {
-    expect(getTemplate('checked_out', 'es')).toMatch(/recogerle/);
-    expect(getTemplate('checked_in', 'es')).toMatch(/se registró/);
-  });
-
-  it('returns English for en, unset, and unrecognized languages without throwing', () => {
-    const english = getTemplate('checked_out', 'en');
-    expect(english).toMatch(/ready for pickup/);
-    expect(getTemplate('checked_out', undefined)).toBe(english);
-    expect(getTemplate('checked_out', null)).toBe(english);
-    expect(getTemplate('checked_out', '')).toBe(english);
-    expect(getTemplate('checked_out', 'tlh')).toBe(english);
-    expect(getTemplate('checked_out', 'xx-YY')).toBe(english);
-  });
-
-  it('resolves regional and mixed-case tags to their base language', () => {
-    expect(resolveLanguage('es-MX')).toBe('es');
-    expect(resolveLanguage('ES')).toBe('es');
-    expect(resolveLanguage('en-GB')).toBe('en');
-    expect(resolveLanguage(42)).toBe('en');
-  });
-
-  it('throws on an unknown template name (programmer error, not bad data)', () => {
-    expect(() => getTemplate('no_such_template', 'en')).toThrow(/unknown template/i);
-    expect(() => getTemplate('_meta', 'en')).toThrow(/invalid template name/i);
-  });
-
-  it('interpolates {{vars}} and leaves unmatched placeholders visible', () => {
-    const text = renderTemplate('checked_in', 'en', { name: 'Ana Ruiz', time: '4:15 PM' });
-    expect(text).toBe('Ana Ruiz checked in at Kumon at 4:15 PM.');
-    expect(renderTemplate('checked_in', 'en', { name: 'Ana Ruiz' })).toContain('{{time}}');
-  });
-
-  it('every language file has exactly the English template keys (no untranslated gaps)', () => {
-    const templates = getAllTemplatesForTests();
-    const englishKeys = Object.keys(templates.get('en')).filter((k) => !k.startsWith('_'));
-    expect(englishKeys.length).toBeGreaterThan(0);
-    for (const [language, table] of templates) {
-      const keys = Object.keys(table).filter((k) => !k.startsWith('_'));
-      expect({ language, keys: keys.sort() }).toEqual({
-        language,
-        keys: [...englishKeys].sort(),
-      });
-      for (const key of keys) {
-        expect(table[key], `${language}.${key} must be a non-empty string`).toBeTypeOf('string');
-        expect(table[key].trim()).not.toBe('');
-      }
-      expect(table._meta?.intlLocale, `${language} needs _meta.intlLocale`).toBeTypeOf('string');
-      expect(table._meta?.nativeName, `${language} needs _meta.nativeName`).toBeTypeOf('string');
-    }
-  });
-});
-
-describe('composeAttendanceNotification', () => {
-  const iso = '2026-07-30T23:25:00.000Z'; // 4:25 PM America/Los_Angeles
-
-  it('composes Spanish for a student with preferred_language = es', () => {
-    const student = { first_name: 'Sofía', last_name: 'García', preferred_language: 'es' };
-    const text = composeAttendanceNotification(student, 'checked_out', iso);
-    expect(text).toContain('Sofía García');
-    expect(text).toMatch(/terminó su sesión en Kumon/);
-    expect(text).toMatch(/4:25/);
-    expect(text).not.toMatch(/\{\{/);
-  });
-
-  it('composes English for the default and for unrecognized languages', () => {
-    const base = { first_name: 'Liam', last_name: 'Chen' };
-    for (const preferred_language of ['en', undefined, null, 'zz']) {
-      const text = composeAttendanceNotification({ ...base, preferred_language }, 'checked_in', iso);
-      expect(text).toBe('Liam Chen checked in at Kumon at 4:25 PM.');
-    }
-  });
-});
 
 describe('preferred_language over the API', () => {
   let center;
@@ -198,21 +107,5 @@ describe('preferred_language over the API', () => {
       .prepare('SELECT preferred_language FROM students WHERE id = ? AND center_id = ?')
       .get(student.id, center.id);
     expect(unchanged.preferred_language).toBe('es');
-  });
-
-  it('notification composed from a stored student row uses the stored language', async () => {
-    const esStudent = await insertStudent(center.id, {
-      first: 'Camila',
-      last: 'Reyes',
-      preferred_language: 'es',
-    });
-    const enStudent = await insertStudent(center.id, { first: 'Oliver', last: 'Wright' });
-
-    expect(
-      composeAttendanceNotification(esStudent, 'checked_out', '2026-07-30T23:25:00.000Z')
-    ).toMatch(/terminó su sesión en Kumon/);
-    expect(
-      composeAttendanceNotification(enStudent, 'checked_out', '2026-07-30T23:25:00.000Z')
-    ).toMatch(/ready for pickup/);
   });
 });

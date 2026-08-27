@@ -13,7 +13,6 @@
     }
   },
   "crons": [
-    { "path": "/api/cron/digests", "schedule": "0 16 * * 1" },
     { "path": "/api/demo/reset", "schedule": "0 8 * * *" }
   ]
 }

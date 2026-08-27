@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Navigate, Routes, Route, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import DeskPage from './pages/DeskPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
-import MessagesPanel from './components/MessagesPanel';
 import InsightsPage from './pages/InsightsPage'; // agent-7-insights
-import BookingPage from './pages/BookingPage'; // agent-3-self-scheduling
 import StatusPage from './pages/StatusPage'; // agent-observability
-import ParentApp from './parent/ParentApp'; // agent-13-parent-pwa
-import { api, setCenterSlug } from './api';
+import { setCenterSlug } from './api';
 import { DEFAULT_CENTER_SLUG, centerPath } from './centerPath';
 
 /**
@@ -31,36 +28,12 @@ function RegisterToDeskRedirect() {
   return <Navigate to={centerPath(centerSlug, '/desk')} replace />;
 }
 
-/**
- * Staff messages live outside DeskPage/AdminPage, so this route loads
- * GET /present solely for the center's configured timezone (same source
- * DeskPage and AdminPage already use).
- */
-function MessagesRoute() {
-  const [timezone, setTimezone] = useState();
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getPresent()
-      .then((data) => {
-        if (!cancelled && data?.timezone) setTimezone(data.timezone);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return <MessagesPanel timezone={timezone} />;
-}
-
 function CenterRoutes() {
   return (
     <CenterScope>
       <Routes>
         {/* Registration lives on Desk; keep old URLs working. */}
         <Route path="register" element={<RegisterToDeskRedirect />} />
-        {/* agent-3-self-scheduling: public parent booking, outside the staff shell */}
-        <Route path="book" element={<BookingPage />} />
         <Route
           path="*"
           element={
@@ -80,14 +53,6 @@ function CenterRoutes() {
                   element={
                     <ProtectedRoute>
                       <DashboardPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="messages"
-                  element={
-                    <ProtectedRoute>
-                      <MessagesRoute />
                     </ProtectedRoute>
                   }
                 />
@@ -131,23 +96,15 @@ export default function App() {
       <Route path="/" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}`} replace />} />
       <Route path="/register" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/desk`} replace />} />
       <Route path="/desk" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/desk`} replace />} />
-      {/* agent-13-parent-pwa: parent PWA, global (magic-link auth carries the
-          student's tenancy; parentApi talks to the unslugged default-center API). */}
-      <Route path="/family/*" element={<ParentApp />} />
       <Route
         path="/dashboard"
         element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/dashboard`} replace />}
-      />
-      <Route
-        path="/messages"
-        element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/messages`} replace />}
       />
       <Route
         path="/insights"
         element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/insights`} replace />}
       />
       <Route path="/admin" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/admin`} replace />} />
-      <Route path="/book" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/book`} replace />} />
       <Route path="/status" element={<Navigate to={`/${DEFAULT_CENTER_SLUG}/status`} replace />} />
 
       <Route path="/:centerSlug/*" element={<CenterRoutes />} />

@@ -16,9 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The same API surface is mounted twice: slugged for explicit tenancy and
 // unslugged for the pre-multi-tenant center (see middleware/center.js).
-const WHATSAPP_WEBHOOK_PATH = /^\/api(?:\/c\/[^/]+)?\/webhooks\/whatsapp$/;
 const ROSTER_IMPORT_PATH = /^\/api(?:\/c\/[^/]+)?\/admin\/roster-import$/;
-const TWILIO_SMS_WEBHOOK_PATH = /^\/api(?:\/c\/[^/]+)?\/webhooks\/sms$/;
 
 export function createApp() {
   const app = express();
@@ -29,29 +27,19 @@ export function createApp() {
 
   app.use(cors(createCorsOptions()));
 
-  // Meta signs webhook payloads over the exact raw bytes; keep them for
-  // X-Hub-Signature-256 verification (routes/whatsappWebhook.routes.js).
-  const captureRawBody = (req, _res, buf) => {
-    if (WHATSAPP_WEBHOOK_PATH.test(req.path)) req.rawBody = buf;
-  };
-
   // Roster upload is the only large payload; everything else stays small.
-  // Twilio posts application/x-www-form-urlencoded, not JSON.
   // Also accept text/plain: some browsers default string fetch bodies to
   // text/plain;charset=UTF-8 when Content-Type is missing, which left
   // req.body empty and made /check-in return "student_id is required".
   const jsonSmall = express.json({
     limit: '256kb',
     type: ['application/json', 'text/plain'],
-    verify: captureRawBody,
   });
   const jsonLarge = express.json({
     limit: '8mb',
     type: ['application/json', 'text/plain'],
   });
-  const urlencodedSmall = express.urlencoded({ extended: false, limit: '256kb' });
   app.use((req, res, next) => {
-    if (TWILIO_SMS_WEBHOOK_PATH.test(req.path)) return urlencodedSmall(req, res, next);
     return ROSTER_IMPORT_PATH.test(req.path)
       ? jsonLarge(req, res, next)
       : jsonSmall(req, res, next);
@@ -78,11 +66,9 @@ export function createApp() {
   app.use('/api/c/:centerSlug', slugScoped);
 
   // Legacy unslugged paths resolve to the original center so existing
-  // bookmarked URLs, the gateway phone, and configured webhooks keep working.
-  // Vercel Cron also lands here (/api/cron/digests, /api/demo/reset): the
-  // digest cron handler ignores req.center and processes every center's
-  // students in one pass; /api/demo/reset 404s unless DEMO_MODE=true, so
-  // which center this middleware resolves is irrelevant to both.
+  // bookmarked URLs and configured outbound webhooks keep working.
+  // Vercel Cron lands here (/api/demo/reset): that handler 404s unless
+  // DEMO_MODE=true, so which center this middleware resolves is irrelevant.
   const defaultScoped = Router();
   defaultScoped.use(resolveDefaultCenter);
   defaultScoped.use(apiRoutes);

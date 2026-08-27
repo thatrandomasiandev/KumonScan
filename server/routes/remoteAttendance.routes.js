@@ -4,7 +4,6 @@ import { requireAdmin } from '../middleware/auth.js';
 import { formatFullName } from '../utils/names.js';
 import { enrichOpenSession, normalizeSubjects } from '../sessionRules.js';
 import { getOpenSession } from '../services/studentService.js';
-import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { getAuthoritativeTimeOr503 } from './shared.js';
 import {
@@ -79,10 +78,6 @@ router.post('/check-in', requireAdmin, async (req, res, next) => {
       authoritativeTime.iso,
       subjects
     );
-
-    // Same parent notification as an in-person desk check-in. Check-outs go
-    // through the shared /check-out handler, which already notifies.
-    await enqueueNotification(session, student, 'checked_in', authoritativeTime.iso);
 
     // agent-10: fire-and-forget on purpose — a slow subscriber must not delay check-in.
     void emitWebhookEvent(req.center.id, 'student.checked_in', {

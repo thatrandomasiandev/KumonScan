@@ -5,10 +5,18 @@ import { fetchAuthoritativeTime } from '../timeService.js';
 import { formatFullName, normalizeName, validateNameField } from '../utils/names.js';
 import { insertStudent } from '../services/studentService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
-import { resolveLanguage } from '../services/i18nService.js';
 import { captureError } from '../services/errorReportingService.js';
 
 const router = Router();
+
+/** Normalize preferred_language for registration UI i18n (en/es). */
+function resolveLanguage(raw) {
+  if (typeof raw !== 'string') return 'en';
+  const tag = raw.trim().toLowerCase();
+  if (!tag) return 'en';
+  const base = tag.split(/[-_]/)[0];
+  return base === 'es' ? 'es' : 'en';
+}
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 1000,

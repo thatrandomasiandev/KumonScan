@@ -2,15 +2,12 @@ import { Router } from 'express';
 import db from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { recentErrorCount } from '../services/errorReportingService.js';
-import { isTwilioConfigured } from '../services/twilioService.js';
-import { GATEWAY_LAST_SEEN_KEY } from './gateway.routes.js';
 
 /**
  * GET /api/status — staff-authenticated ops surface (center-scoped).
  *
- * Aggregates database reachability, SMS channel (Twilio or Android gateway)
- * plus queue depth, webhook subscription health, and 24h captured-error
- * count in one payload.
+ * Aggregates database reachability, webhook subscription health, and 24h
+ * captured-error count in one payload.
  * Every check runs through `runCheck`, which converts a thrown error into a
  * `down` result for that check alone.
  *
@@ -19,7 +16,6 @@ import { GATEWAY_LAST_SEEN_KEY } from './gateway.routes.js';
  */
 
 const DB_CHECK_TIMEOUT_MS = 3000;
-const GATEWAY_STALE_SECONDS = Number(process.env.GATEWAY_HEARTBEAT_STALE_SECONDS || 600);
 const ERROR_WINDOW_HOURS = 24;
 const WEBHOOK_WINDOW_HOURS = 24;
 const WEBHOOK_WARN_FAILURE_RATE = 0.1;
@@ -63,84 +59,6 @@ export async function checkDatabase() {
     detail: 'query round trip succeeded',
     latency_ms: Date.now() - started,
   };
-}
-
-async function readGatewayLastSeen(centerId) {
-  if (!(await tableExists('settings'))) return null;
-  const row = await db
-    .prepare(`SELECT value FROM settings WHERE center_id = ? AND key = ?`)
-    .get(centerId, GATEWAY_LAST_SEEN_KEY);
-  return row?.value || null;
-}
-
-async function smsQueueCounts(centerId) {
-  if (!(await tableExists('sms_queue'))) return null;
-  const rows = await db
-    .prepare(
-      `SELECT status, COUNT(*) AS count FROM sms_queue
-       WHERE center_id = ? GROUP BY status`
-    )
-    .all(centerId);
-  const byStatus = Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
-  return {
-    pending: byStatus.pending ?? 0,
-    failed: byStatus.failed ?? 0,
-  };
-}
-
-export async function checkSmsGateway(centerId) {
-  const queue = await smsQueueCounts(centerId);
-
-  if (isTwilioConfigured()) {
-    const pending = queue?.pending ?? 0;
-    const failed = queue?.failed ?? 0;
-    let status = 'ok';
-    let detail = 'Twilio direct-send configured';
-    if (failed > 0) {
-      status = 'warn';
-      detail = `Twilio configured; ${failed} failed message(s) in queue`;
-    } else if (pending > 0) {
-      status = 'warn';
-      detail = `Twilio configured; ${pending} pending message(s) not yet sent`;
-    }
-    return {
-      status,
-      detail,
-      channel: 'twilio',
-      queue: queue || { pending: 0, failed: 0 },
-    };
-  }
-
-  const lastSeen = await readGatewayLastSeen(centerId);
-  if (!lastSeen) {
-    return {
-      status: 'not_configured',
-      detail: 'no Twilio credentials and no gateway_last_seen heartbeat',
-    };
-  }
-
-  const secondsAgo = Math.max(0, Math.round((Date.now() - new Date(lastSeen).getTime()) / 1000));
-  const stale = !Number.isFinite(secondsAgo) || secondsAgo > GATEWAY_STALE_SECONDS;
-
-  const result = {
-    status: stale ? 'down' : 'ok',
-    detail: stale
-      ? `last heartbeat ${secondsAgo}s ago (stale after ${GATEWAY_STALE_SECONDS}s)`
-      : `last heartbeat ${secondsAgo}s ago`,
-    channel: 'gateway',
-    last_seen: lastSeen,
-    seconds_since_heartbeat: secondsAgo,
-  };
-
-  if (queue) {
-    result.queue = queue;
-    if (result.status === 'ok' && queue.failed > 0) {
-      result.status = 'warn';
-      result.detail += `; ${queue.failed} failed message(s) in queue`;
-    }
-  }
-
-  return result;
 }
 
 export async function checkWebhooks(centerId) {
@@ -246,7 +164,6 @@ async function runCheck(fn) {
 export function defaultChecksFor(centerId) {
   return {
     database: () => checkDatabase(),
-    sms_gateway: () => checkSmsGateway(centerId),
     webhooks: () => checkWebhooks(centerId),
     errors: () => checkErrors(centerId),
   };

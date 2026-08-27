@@ -42,9 +42,6 @@ const READ_ENDPOINTS = [
   { method: 'get', path: '/insights/summary' },
   { method: 'get', path: '/insights/at-risk' },
   { method: 'get', path: '/admin/capacity' },
-  { method: 'get', path: '/admin/gateway-status' },
-  { method: 'get', path: '/messages/unread-count' },
-  { method: 'get', path: '/messages/unmatched' },
   { method: 'get', path: '/remote-attendance/open-sessions' },
   { method: 'get', path: '/webhooks' },
 ];

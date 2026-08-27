@@ -1,11 +1,10 @@
 # Production Environment Variables
 
-Every environment variable the codebase reads, what it controls, and what happens when it is unset. Audited 2026-08-01 by grepping `process.env.*` across `server/`, `client/`, `gateway-app/`, `marketing-site/`, `api/`, and `scripts/` at commit `b8f51ea`. Variables that land with still-unmerged agent branches are listed in their own section at the bottom.
+Every environment variable the codebase reads, what it controls, and what happens when it is unset. Audited against the current tree (parent SMS/WhatsApp/gateway/PWA removed).
 
 Scope notes:
 
 - The **client** reads zero environment variables. The API base is the same-origin path `/api/c/:centerSlug` built at runtime (`client/src/api.js`), so no `client/.env.example` exists and none is needed.
-- The **gateway app** (`gateway-app/`) is a native Android project configured through in-app preferences (`Prefs.kt`: server URL and API key entered on the phone), not environment variables.
 - The **marketing site** deploys as its own Vercel project and needs exactly one variable: `DATABASE_URL` for the lead-capture function.
 
 ## Server (main Vercel project)
@@ -23,22 +22,17 @@ Set these in the Vercel project that serves `api/index.js`. "Fail behavior" is w
 | `CENTER_TIMEZONE` | No | Fallback timezone when a center row has none (`server/timeService.js`). Also seeds the original center's timezone on first boot. | Defaults to `America/Los_Angeles`. |
 | `CENTER_NAME` | No | Display name for the original center seeded on first boot. | Defaults to `KumonScan Center`. |
 | `DEFAULT_CENTER_SLUG` | No | Slug for the original center seeded on first boot; also the slug legacy unslugged `/api/...` paths resolve to. | Defaults to `main`. |
-| `GATEWAY_API_KEY` | Android SMS fallback | Static bearer token the Android gateway phone presents to `/api/gateway/*` (`server/routes/gateway.routes.js`, `messaging.routes.js`). Unused for sends when Twilio is configured (Twilio claims the queue row first). | Fail closed: gateway endpoints return 503. Check-in/out SMS rows still queue in `sms_queue`; they send immediately if Twilio is configured, otherwise they stay unsent until a gateway phone is set up. |
-| `GATEWAY_HEARTBEAT_STALE_SECONDS` | No | Seconds without a gateway heartbeat before `/api/status` reports the Android SMS gateway offline (`server/routes/status.routes.js`). Ignored when Twilio is the live channel. | Defaults to 600. |
-| `TWILIO_ACCOUNT_SID` | For Twilio SMS | Twilio Account SID (`server/services/twilioService.js`). Required together with `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` to send. | Direct-send disabled. Queue rows stay `pending` for the Android gateway phone. |
-| `TWILIO_AUTH_TOKEN` | For Twilio SMS | Twilio Auth Token. Used for REST sends and to verify `X-Twilio-Signature` on `POST /api/webhooks/sms`. | Direct-send disabled. Inbound webhook returns 503. |
-| `TWILIO_FROM_NUMBER` | For Twilio SMS | E.164 Twilio number used as `From` on outbound SMS. | Direct-send disabled even if SID and token are set (`isTwilioConfigured` requires all three). Inbound webhook still verifies if SID + token are set. |
 | `ZOOM_WEBHOOK_SECRET` | No | Zoom webhook signature verification for automatic remote attendance (`server/services/zoomService.js`). | Fail closed: `POST /api/webhooks/zoom` returns 503. Staff log remote sessions manually via the desk Remote toggle. |
-| `WHATSAPP_ACCESS_TOKEN` | No | WhatsApp Cloud API outbound auth (`server/services/whatsappService.js`). | Channel disabled with `WHATSAPP_PHONE_NUMBER_ID`; notifications fall back to SMS. |
-| `WHATSAPP_PHONE_NUMBER_ID` | No | WhatsApp Cloud API sender phone-number id. | Same fallback as above. |
-| `WHATSAPP_VERIFY_TOKEN` | No | WhatsApp webhook subscription handshake (`GET /api/webhooks/whatsapp`). | Fail closed: handshake returns 503. |
-| `WHATSAPP_APP_SECRET` | No | `X-Hub-Signature-256` verification on inbound WhatsApp webhooks. | Fail closed: `POST /api/webhooks/whatsapp` returns 503. |
 | `LOG_LEVEL` | No | pino log level (`server/services/loggingService.js`). | Defaults to `info`; `silent` under `NODE_ENV=test`. |
-| `PARENT_SESSION_SECRET` | No | HMAC key for signing parent magic-link `parent_session` cookies (`server/services/parentAuthService.js`). | Falls back to `` `parent::${ADMIN_SESSION_SECRET \|\| ADMIN_PASSWORD}` ``. |
-| `PUBLIC_BASE_URL` | No | Absolute origin used to build the parent magic-link URL (`server/routes/parentAuth.routes.js`). | Falls back to the request's own protocol/host, which is correct behind Vercel but should be set explicitly if the app is ever reachable at more than one hostname. |
 | `PORT` | Local only | Listen port for `server/index.js` (local/Railway process mode). Unused on Vercel, which invokes `api/index.js` as a function. | Defaults to 3001. |
-| `CRON_SECRET` | For scheduled jobs | Bearer token Vercel Cron sends to `GET /api/cron/digests` and `GET /api/demo/reset`. | Cron endpoints reject unauthenticated calls (`digests.routes.js` 503s when unset; demo reset 401s). |
+| `CRON_SECRET` | For scheduled jobs | Bearer token Vercel Cron sends to `GET /api/demo/reset`. | Demo reset 401s when unset. |
 | `DEMO_MODE` | Demo deployment only | Marks a deployment as the sales demo (`docs/DEMO.md`): enables `/api/demo/reset` and the seed-script wipe guards. | Demo features disabled (reset 404s). Never set on a deployment whose `DATABASE_URL` holds real center data. |
+
+### Removed / unused (do not set)
+
+Parent communication was removed. These env vars are ignored if still present in Vercel:
+
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `GATEWAY_API_KEY`, `GATEWAY_HEARTBEAT_STALE_SECONDS`, `PARENT_SESSION_SECRET`, `PUBLIC_BASE_URL` (was only for parent magic links).
 
 ## Platform-provided (never set by hand)
 
@@ -63,19 +57,16 @@ Set these in the Vercel project that serves `api/index.js`. "Fail behavior" is w
 
 `agent-billing` (Stripe tuition billing) is excluded from integration by product decision, not a merge-ordering gap — its `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` vars are intentionally omitted here.
 
-## Security pass (2026-08-01, at `b8f51ea`)
+## Security pass (2026-08-01)
 
-**Dependency audits.** `npm audit`: `server/` 0 vulnerabilities, `marketing-site/` 0 vulnerabilities. `client/` reports 2 high: `react-router` 7.12.0-8.2.0 via `react-router-dom` 7.18.2 (GHSA-qwww-vcr4-c8h2, "RSC Mode CSRF Bypass"). Analysis: the app already runs the newest `react-router-dom` release that exists (7.18.2); no `react-router-dom` version depends on the patched core (`react-router` 8.3.0), so npm's only offered fix is a breaking downgrade to 7.11.0. The advisory's vulnerable path is RSC-mode server-action execution; this client is a declarative `<BrowserRouter>` SPA (`client/src/main.jsx`) with no RSC, loaders, or actions, so the path is unreachable. Closing the audit warning permanently requires migrating imports from `react-router-dom` to `react-router@8`, a client-wide code change to schedule, not an emergency.
+**CORS.** `ALLOWED_ORIGINS` is unset in production terms: `server/corsConfig.js` falls back to localhost dev origins. Production on Vercel is same-origin (client and API share one domain), so no allowlist entry is needed for the main app.
 
-**CORS.** `ALLOWED_ORIGINS` is unset in production terms: `server/corsConfig.js` falls back to localhost dev origins. Production on Vercel is same-origin (client and API share one domain), so no allowlist entry is needed for the main app. Any cross-origin browser surface (a separately-hosted parent PWA or marketing page calling the app API) requires the real production origin in `ALLOWED_ORIGINS`. The real domain is a launch decision; do not guess it.
+**Rate limiting under tenancy.** The login (10/min) and registration (10/min) limiters are module-level singletons keyed by client IP. The same router instances serve both `/api/c/:centerSlug/...` and legacy `/api/...` mounts (`server/app.js`), so rotating center slugs hits the same per-IP bucket: no bypass. Known limitation: the store is in-memory per serverless instance, so limits reset on cold starts and are per-instance; acceptable as brute-force friction, not a hard quota.
 
-**Rate limiting under tenancy.** The login (10/min), registration (10/min), and parent magic-link request (5/15min) limiters are module-level singletons keyed by client IP (`express-rate-limit` default). The same router instances serve both `/api/c/:centerSlug/...` and legacy `/api/...` mounts (`server/app.js`), so rotating center slugs hits the same per-IP bucket: no bypass. `app.set('trust proxy', 1)` makes `req.ip` the real client IP behind Vercel's proxy, so limits are per-visitor, not one shared bucket. Known limitation: the store is in-memory per serverless instance, so limits reset on cold starts and are per-instance; acceptable as brute-force friction, not a hard quota.
-
-**Admin session cookie.** `httpOnly`, `sameSite: 'lax'`, `secure` when `NODE_ENV=production`, 7-day expiry, HMAC-signed and bound to one center id, with a revocation denylist on logout (`server/middleware/auth.js`, `auth.routes.js`). Correct for a same-origin deployment on any single production domain, including a custom domain on Vercel. Revisit only if admin UI and API ever split across origins ( `sameSite: 'lax'` would then block the cookie).
+**Admin session cookie.** `httpOnly`, `sameSite: 'lax'`, `secure` when `NODE_ENV=production`, 7-day expiry, HMAC-signed and bound to one center id, with a revocation denylist on logout (`server/middleware/auth.js`, `auth.routes.js`). Correct for a same-origin deployment on any single production domain.
 
 ## Secrets audit (2026-08-01)
 
-- Working tree at `b8f51ea`: pattern scan for Stripe keys (`sk_live_`, `sk_test_`, `whsec_`), AWS keys, Slack tokens, private-key blocks, and credentialed Neon connection strings found nothing outside placeholder values in `.env.example`.
-- Full git history (`git log --all -p`): same patterns, zero matches. No `.env` file was ever committed on any branch.
-- `.gitignore` coverage: the root `.gitignore` ignores `.env` and `.env.*` at every depth (bare pattern, no slash), covering `client/`, `gateway-app/`, and `api/`; `server/.gitignore` and `marketing-site/.gitignore` add their own `.env` entries. `git check-ignore` confirms `client/.env`, `gateway-app/.env`, `marketing-site/.env`, `server/.env`, and `api/.env` are all ignored.
-- Roster CSV/TSV exports (student PII) and `invoices/` are also ignored at the root.
+- Pattern scan for Stripe keys, AWS keys, Slack tokens, private-key blocks, and credentialed Neon connection strings found nothing outside placeholder values in `.env.example`.
+- `.gitignore` coverage: the root `.gitignore` ignores `.env` and `.env.*` at every depth; `server/.gitignore` and `marketing-site/.gitignore` add their own `.env` entries.
+- Roster CSV/TSV exports (student PII) are also ignored at the root.

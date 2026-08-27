@@ -48,10 +48,6 @@ const CHECK_LABELS = {
     title: 'Database',
     description: 'Neon Postgres reachability (trivial query with timeout)',
   },
-  sms_gateway: {
-    title: 'SMS',
-    description: 'Twilio direct-send, or Android gateway heartbeat and queue depth',
-  },
   webhooks: {
     title: 'Webhook delivery',
     description: 'Delivery failure rate over the last 24 hours',

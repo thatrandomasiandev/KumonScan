@@ -3,14 +3,12 @@ import { Box, Typography } from '@mui/material';
 import DeskOutlinedIcon from '@mui/icons-material/DeskOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import { md3Colors, getElevatedSurface, shape } from '../theme';
 import { centerPath, pagePath } from '../centerPath';
 
 const navItems = [
   { path: '/desk', label: 'Desk', icon: DeskOutlinedIcon },
   { path: '/dashboard', label: 'Dashboard', icon: BarChartOutlinedIcon },
-  { path: '/messages', label: 'Messages', icon: ForumOutlinedIcon }, // agent-1-messaging
   { path: '/admin', label: 'Admin', icon: SettingsOutlinedIcon },
 ];
 

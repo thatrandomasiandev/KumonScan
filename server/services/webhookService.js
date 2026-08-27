@@ -39,7 +39,7 @@ let tablesPromise = null;
 
 /**
  * The subscriptions table lives here (not db.js) so this workstream stays
- * inside its own files, mirroring messagingService.ensureMessagingTables.
+ * inside its own files.
  */
 export async function ensureWebhookTables() {
   if (!tablesPromise) {

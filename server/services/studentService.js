@@ -182,7 +182,6 @@ export function serializeStudent(student) {
     name: formatFullName(student),
     enrolled_subjects: normalizeSubjects(student.enrolled_subjects) || 'math+reading',
     schedule_days: parseScheduleDays(student.schedule_days),
-    notify_channel: student.notify_channel || 'sms',
   };
 }
 

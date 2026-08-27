@@ -53,7 +53,7 @@ describe('observability', () => {
       expect(res.body.generated_at).toBeTruthy();
       expect(['ok', 'warn', 'down']).toContain(res.body.overall);
 
-      for (const name of ['database', 'sms_gateway', 'webhooks', 'errors']) {
+      for (const name of ['database', 'webhooks', 'errors']) {
         expect(res.body.checks[name]).toBeTruthy();
         expect(['ok', 'warn', 'down', 'not_configured']).toContain(
           res.body.checks[name].status
@@ -67,29 +67,29 @@ describe('observability', () => {
   });
 
   describe('check independence', () => {
-    it('a database failure does not prevent reporting the gateway status', async () => {
+    it('a database failure does not prevent reporting other checks', async () => {
       const report = await runStatusChecks(center.id, {
         database: async () => {
           throw new Error('connection refused');
         },
-        sms_gateway: async () => ({ status: 'ok', detail: 'heartbeat 5s ago' }),
+        webhooks: async () => ({ status: 'ok', detail: 'healthy' }),
       });
 
       expect(report.checks.database.status).toBe('down');
       expect(report.checks.database.detail).toMatch(/connection refused/);
-      expect(report.checks.sms_gateway.status).toBe('ok');
+      expect(report.checks.webhooks.status).toBe('ok');
       expect(report.overall).toBe('down');
     });
 
-    it('a gateway failure does not prevent reporting the database status', async () => {
+    it('a webhooks failure does not prevent reporting the database status', async () => {
       const report = await runStatusChecks(center.id, {
         database: async () => ({ status: 'ok', latency_ms: 3 }),
-        sms_gateway: async () => {
-          throw new Error('settings read exploded');
+        webhooks: async () => {
+          throw new Error('deliveries read exploded');
         },
       });
 
-      expect(report.checks.sms_gateway.status).toBe('down');
+      expect(report.checks.webhooks.status).toBe('down');
       expect(report.checks.database.status).toBe('ok');
       expect(report.overall).toBe('down');
     });

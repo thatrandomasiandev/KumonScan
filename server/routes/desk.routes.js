@@ -26,7 +26,6 @@ import {
 import { getWeekdayCapacity, countExpectedForWeekday } from '../services/capacityService.js';
 import { captureError } from '../services/errorReportingService.js';
 import { logger } from '../services/loggingService.js';
-import { enqueueNotification } from '../services/smsQueueService.js';
 import { emit as emitWebhookEvent } from '../services/webhookService.js';
 import { assertCaregiverCanPickUp } from '../services/caregiverService.js'; // agent-2-pickup-auth
 import { getAuthoritativeTimeOr503 } from './shared.js';
@@ -68,8 +67,6 @@ router.post('/check-in', requireAdmin, idempotency(), async (req, res) => {
     }
 
     const session = await insertCheckIn(req.center.id, student.id, authoritativeTime.iso, subjects);
-
-    await enqueueNotification(session, student, 'checked_in', authoritativeTime.iso);
 
     // agent-10: fire-and-forget on purpose — a slow subscriber must not delay check-in.
     void emitWebhookEvent(req.center.id, 'student.checked_in', {
@@ -167,8 +164,6 @@ router.post('/check-out', requireAdmin, idempotency(), async (req, res) => {
     const session = await completeCheckOut(openSession, authoritativeTime.iso, pickedUpBy);
     const allowance = session.allowance_minutes ?? allowanceForSubjects(session.subjects || 'both');
     const wasOvertime = (session.duration_minutes || 0) > allowance;
-
-    await enqueueNotification(session, student, 'checked_out', authoritativeTime.iso);
 
     // agent-10: fire-and-forget on purpose — a slow subscriber must not delay check-out.
     void emitWebhookEvent(req.center.id, 'student.checked_out', {

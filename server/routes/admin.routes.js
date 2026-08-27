@@ -9,8 +9,6 @@ import {
   CAPACITY_SETTING_KEY,
   WEEKDAYS,
 } from '../services/capacityService.js';
-import { GATEWAY_LAST_SEEN_KEY } from './gateway.routes.js';
-import { isTwilioConfigured } from '../services/twilioService.js';
 import { logger } from '../services/loggingService.js';
 
 const router = Router();
@@ -155,47 +153,6 @@ router.put('/admin/capacity', requireAdmin, requireRole('manager'), async (req, 
     .run(req.center.id, CAPACITY_SETTING_KEY, JSON.stringify(clean));
 
   res.json({ ok: true, capacity: clean, weekdays: WEEKDAYS });
-});
-
-/**
- * Staff-facing SMS health: which sender is live (Twilio vs Android gateway
- * phone), when the phone last polled, and how deep the queue is.
- */
-router.get('/admin/gateway-status', requireAdmin, async (req, res) => {
-  const lastSeenRow = await db
-    .prepare('SELECT value FROM settings WHERE center_id = ? AND key = ?')
-    .get(req.center.id, GATEWAY_LAST_SEEN_KEY);
-
-  const counts = await db
-    .prepare(
-      `SELECT
-         COUNT(*) FILTER (WHERE status = 'pending') AS pending,
-         COUNT(*) FILTER (WHERE status = 'sending') AS sending,
-         COUNT(*) FILTER (WHERE status = 'failed') AS failed,
-         COUNT(*) FILTER (WHERE status = 'sent') AS sent
-       FROM sms_queue WHERE center_id = ?`
-    )
-    .get(req.center.id);
-
-  const lastSeenAt = lastSeenRow?.value || null;
-  const secondsSinceSeen = lastSeenAt
-    ? Math.max(0, Math.round((Date.now() - new Date(lastSeenAt).getTime()) / 1000))
-    : null;
-  const twilioConfigured = isTwilioConfigured();
-  const gatewayConfigured = Boolean(process.env.GATEWAY_API_KEY);
-
-  res.json({
-    configured: twilioConfigured || gatewayConfigured,
-    twilio_configured: twilioConfigured,
-    gateway_configured: gatewayConfigured,
-    channel: twilioConfigured ? 'twilio' : gatewayConfigured ? 'gateway' : null,
-    last_seen_at: lastSeenAt,
-    seconds_since_seen: secondsSinceSeen,
-    pending: Number(counts?.pending || 0),
-    sending: Number(counts?.sending || 0),
-    failed: Number(counts?.failed || 0),
-    sent: Number(counts?.sent || 0),
-  });
 });
 
 export default router;

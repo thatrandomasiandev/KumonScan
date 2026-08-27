@@ -82,8 +82,6 @@ CENTER_TIMEZONE=America/Los_Angeles
 NODE_ENV=production
 ```
 
-For parent SMS (Twilio), also set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER`, then point the number's inbound webhook at `/api/webhooks/sms`.
-
 Health check: `GET /health`. Same-origin `/api` needs no CORS allowlist; set `ALLOWED_ORIGINS` only for cross-origin admin clients.
 
 In production, admin routes return 503 if `ADMIN_PASSWORD` is unset (auth fails closed). JSON bodies are capped at 256kb except `/api/admin/roster-import` (8mb). `/api/register` is rate-limited to 10 requests per minute per IP.
@@ -97,28 +95,6 @@ In production, admin routes return 503 if `ADMIN_PASSWORD` is unset (auth fails 
 - **Marketing site build:** same, in `marketing-site/` when that directory is present on the ref.
 
 Preview deploys come from Vercel's Git integration (configured via `vercel.json`), not from Actions.
-
-## Parent SMS
-
-Check-in and check-out enqueue a parent text in the `sms_queue` table (skipped when the student has no parent phone). Twilio is the live sender when all three of `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are set: the server POSTs to Twilio's Messages API immediately and marks the queue row `sent` or `failed`. Parent replies to the Twilio number arrive at `POST /api/webhooks/sms` (Twilio signs the request; the server verifies `X-Twilio-Signature` with `TWILIO_AUTH_TOKEN`) and show up in Admin's Messages thread.
-
-In the Twilio console, set the number's **A message comes in** webhook to `https://<domain>/api/webhooks/sms` (POST). Without the three env vars, queue rows stay `pending` for the optional Android fallback below.
-
-### Android gateway fallback
-
-A dedicated Android phone running `gateway-app/` can send queued texts through the phone's own SMS plan when Twilio is unset:
-
-1. Set `GATEWAY_API_KEY` (any long random string) in the server environment.
-2. Build and install `gateway-app/` on the phone (see `gateway-app/README.md`).
-3. Enter the server URL and the same key in the app, grant SMS permission, start the service.
-
-The phone polls `GET /api/gateway/pending` every 15 seconds (claims up to 20 messages atomically), sends via the phone's SMS plan, and reports each result to `POST /api/gateway/:id/ack`. Failures retry up to 3 attempts, then stay `failed`. `GET /api/admin/gateway-status` (staff-authenticated) reports whether Twilio is configured, the phone's last heartbeat, and pending/failed counts. Without `GATEWAY_API_KEY`, gateway endpoints return 503.
-
-## WhatsApp channel
-
-Each student has a `notify_channel` (`sms` default, or `whatsapp`) and an optional `parent_whatsapp` number, both editable in Admin. Students set to WhatsApp get check-in/check-out notifications through the Meta Cloud API (`graph.facebook.com/v19.0`) instead of the SMS queue; a missing `parent_whatsapp`, unset WhatsApp config, or a send failure never fails the check-in — the first two fall back to SMS with a logged warning, a send failure marks the message row `failed`. Inbound WhatsApp messages and delivery-status updates arrive at `/api/webhooks/whatsapp`, verified against `WHATSAPP_APP_SECRET` via `X-Hub-Signature-256`, and land in the same `messages` table as SMS (`channel = 'whatsapp'`) so staff see one thread per student.
-
-Setup requires four env vars (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`) plus two message templates named `checked_in` and `checked_out` (each with two body parameters: student name, local time) submitted for approval in Meta Business Manager. Until the templates are approved, sends fail soft with a template-not-found API error.
 
 ## Pages
 
@@ -156,13 +132,6 @@ Setup requires four env vars (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID
 | PATCH  | `/api/students/:id/deactivate` | Deactivate a student (manager only)              |
 | GET    | `/api/dashboard`               | Dashboard summary + charts                       |
 | GET    | `/api/time`                    | Current server-sourced time                      |
-| GET    | `/api/gateway/pending`         | Gateway phone claims queued SMS (bearer key)     |
-| POST   | `/api/gateway/:id/ack`         | Gateway phone reports send result                |
-| POST   | `/api/gateway/heartbeat`       | Gateway phone liveness ping                      |
-| GET    | `/api/admin/gateway-status`    | Twilio/gateway channel + pending/failed counts   |
-| GET    | `/api/webhooks/whatsapp`       | Meta webhook subscription handshake              |
-| POST   | `/api/webhooks/whatsapp`       | Inbound WhatsApp + delivery status (signed)      |
-| POST   | `/api/webhooks/sms`            | Inbound Twilio SMS (X-Twilio-Signature)          |
 | POST   | `/api/auth/login`              | Admin login (sets httpOnly cookie; rate-limited) |
 | POST   | `/api/auth/logout`             | Clears cookie and revokes the server-side session |
 | GET    | `/api/auth/status`             | Whether the current cookie is a valid admin session |

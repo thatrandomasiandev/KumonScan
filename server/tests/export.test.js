@@ -5,7 +5,6 @@ import { unzipSync, strFromU8 } from 'fflate';
 import app from '../app.js';
 import db, { sqlNow } from '../db.js';
 import { EXPORT_TABLES, tableToCsv } from '../routes/export.routes.js';
-import { ensureMessagingTables } from '../services/messagingService.js';
 import { defaultCenter, loginCookie } from './helpers.js';
 
 /**
@@ -102,18 +101,8 @@ describe('Full data export', () => {
         180
       );
 
-    await ensureMessagingTables();
-    const messageBody = `Running late today (${runId})`;
-    await db
-      .prepare(
-        `INSERT INTO messages (center_id, student_id, direction, body, status, created_at)
-         VALUES (?, ?, 'inbound', ?, 'sent', ?)`
-      )
-      .run(center.id, studentId, messageBody, sqlNow());
-
     const present = await presentExportTables();
     expect(present.has('students')).toBe(true);
-    expect(present.has('messages')).toBe(true);
 
     const res = await downloadExport(cookie);
     expect(res.status).toBe(200);
@@ -144,7 +133,6 @@ describe('Full data export', () => {
     expect(csvText(files, 'sessions')).toContain(checkInTime);
     expect(csvText(files, 'staff')).toContain(`Export${runId}`);
     expect(csvText(files, 'staff_sessions')).toContain('2031-01-15T18:00:00.000Z');
-    expect(csvText(files, 'messages')).toContain(messageBody);
 
     const manifest = JSON.parse(strFromU8(files['manifest.json']));
     expect(manifest.generated_at).toBeTruthy();
