@@ -75,6 +75,8 @@ export const api = {
 
   getCompletedToday: () => request('/completed-today'),
 
+  getBirthdaysThisMonth: () => request('/birthdays-this-month'),
+
   getAbsent: (date) => {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
     return request(`/absent${qs}`);

@@ -16,6 +16,8 @@ invoices/
 # Roster exports — student PII, never commit
 *.csv
 *.tsv
+*.xlsx
+rosters/
 .vercel
 
 # Live cross-worktree agent coordination state (ledger + locks), never versioned.

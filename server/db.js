@@ -380,7 +380,8 @@ async function migrateStudentsTable() {
         notify_channel TEXT NOT NULL DEFAULT 'sms',
         parent_whatsapp TEXT,
         preferred_language TEXT NOT NULL DEFAULT 'en',
-        student_number BIGINT
+        student_number BIGINT,
+        date_of_birth TEXT
       )
     `);
     return;
@@ -474,6 +475,11 @@ async function migrateStudentsTable() {
   // would break every insert that no longer supplies a value.
   if (cols.includes('qr_code_value')) {
     await exec(`ALTER TABLE students DROP COLUMN qr_code_value`);
+  }
+  // CRM roster "Date of Birth" (YYYY-MM-DD). Used by Desk birthdays-this-month.
+  cols = await columnNames('students');
+  if (!cols.includes('date_of_birth')) {
+    await exec(`ALTER TABLE students ADD COLUMN date_of_birth TEXT`);
   }
 }
 

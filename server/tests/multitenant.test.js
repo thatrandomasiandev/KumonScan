@@ -34,6 +34,7 @@ const READ_ENDPOINTS = [
   { method: 'get', path: '/present' },
   { method: 'get', path: '/completed-today' },
   { method: 'get', path: '/absent?date=2026-07-30' },
+  { method: 'get', path: '/birthdays-this-month' },
   { method: 'get', path: '/dashboard' },
   { method: 'get', path: '/staff' },
   { method: 'get', path: '/reports/attendance?period=monthly&month=2026-07' },

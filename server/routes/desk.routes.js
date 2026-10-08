@@ -349,4 +349,61 @@ router.get('/completed-today', requireAdmin, async (req, res) => {
   });
 });
 
+/**
+ * Active students whose birthday falls in the center's current calendar month.
+ * DOB comes from CRM roster import (date_of_birth). Sorted by day-of-month.
+ */
+router.get('/birthdays-this-month', requireAdmin, async (req, res) => {
+  const today = getTodayInTimezone();
+  const [yearStr, monthStr, dayStr] = today.split('-');
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  const rows = await db
+    .prepare(
+      `SELECT id, first_name, last_name, date_of_birth
+       FROM students
+       WHERE center_id = ?
+         AND active = 1
+         AND date_of_birth IS NOT NULL
+         AND date_of_birth ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+         AND SUBSTRING(date_of_birth FROM 6 FOR 2) = ?
+       ORDER BY SUBSTRING(date_of_birth FROM 9 FOR 2) ASC,
+                LOWER(last_name) ASC,
+                LOWER(first_name) ASC`
+    )
+    .all(req.center.id, monthStr);
+
+  const students = rows.map((row) => {
+    const dobDay = Number(row.date_of_birth.slice(8, 10));
+    const dobMonth = Number(row.date_of_birth.slice(5, 7));
+    const birthYear = Number(row.date_of_birth.slice(0, 4));
+    // Age they turn on this year's birthday (center calendar year).
+    let turningAge = null;
+    if (Number.isInteger(birthYear) && birthYear > 1900) {
+      turningAge = Number(yearStr) - birthYear;
+    }
+    return {
+      id: row.id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      name: formatFullName(row),
+      date_of_birth: row.date_of_birth,
+      birthday_month: dobMonth,
+      birthday_day: dobDay,
+      is_today: dobMonth === month && dobDay === day,
+      turning_age: turningAge,
+    };
+  });
+
+  res.json({
+    students,
+    count: students.length,
+    month,
+    year: Number(yearStr),
+    date: today,
+    timezone: getCenterTimezone(),
+  });
+});
+
 export default router;

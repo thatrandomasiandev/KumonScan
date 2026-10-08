@@ -50,6 +50,52 @@ function parseActiveCell(raw) {
   return lower !== 'false' && lower !== '0';
 }
 
+/**
+ * Normalize CRM / spreadsheet birth dates to YYYY-MM-DD.
+ * Accepts MM/DD/YYYY (Kumon CRM), YYYY-MM-DD, and ISO datetime strings.
+ * Returns null when blank or unparseable (row still imports without DOB).
+ */
+export function parseDateOfBirth(raw) {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  // ISO datetime from ExcelJS Date cells (toISOString).
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    if (isValidYmd(y, m, d)) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+    return null;
+  }
+
+  // Kumon CRM: 09/22/2012 or 9/22/2012
+  const usMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (usMatch) {
+    const m = Number(usMatch[1]);
+    const d = Number(usMatch[2]);
+    const y = Number(usMatch[3]);
+    if (isValidYmd(y, m, d)) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    return null;
+  }
+
+  return null;
+}
+
+function isValidYmd(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  return (
+    dt.getUTCFullYear() === year && dt.getUTCMonth() === month - 1 && dt.getUTCDate() === day
+  );
+}
+
 function headerHasAny(headers, names) {
   return names.some((name) => headers.has(name));
 }
@@ -70,12 +116,14 @@ function updateStudentSql({
   hasDaysColumn,
   hasActiveColumn,
   hasStudentNumberColumn,
+  hasDobValue,
 }) {
   const setClauses = [];
   if (hasSubjectsColumn && hasSubjectsValue) setClauses.push('enrolled_subjects = ?');
   if (hasDaysColumn) setClauses.push('schedule_days = ?');
   if (hasActiveColumn) setClauses.push('active = ?');
   if (hasStudentNumberColumn) setClauses.push('student_number = ?');
+  if (hasDobValue) setClauses.push('date_of_birth = ?');
   setClauses.push("parent_phone = COALESCE(NULLIF(?, ''), parent_phone)");
 
   return `UPDATE students
@@ -219,6 +267,13 @@ export async function importRosterFromContent(
     'id number',
     'id',
   ]);
+  const hasDobColumn = headerHasAny(normalizedHeaderSet, [
+    'date of birth',
+    'date_of_birth',
+    'dob',
+    'birthday',
+    'birth date',
+  ]);
 
   const summary = {
     created: 0,
@@ -296,6 +351,21 @@ export async function importRosterFromContent(
         }
       }
 
+      let date_of_birth = null;
+      if (hasDobColumn) {
+        const rawDob = firstNonBlankValue(normalized, [
+          'date of birth',
+          'date_of_birth',
+          'dob',
+          'birthday',
+          'birth date',
+        ]);
+        if (rawDob !== '') {
+          date_of_birth = parseDateOfBirth(rawDob);
+          // Unparseable DOB does not skip the row — CRM rows still import.
+        }
+      }
+
       candidates.push({
         first_name,
         last_name,
@@ -306,6 +376,8 @@ export async function importRosterFromContent(
         parent_phone,
         student_number,
         hasStudentNumberValue: student_number != null,
+        date_of_birth,
+        hasDobValue: date_of_birth != null,
       });
     } catch (err) {
       summary.errored.push({ row: label, error: err.message });
@@ -325,8 +397,8 @@ export async function importRosterFromContent(
     );
     const insertStudent = tx.prepare(
       `INSERT INTO students
-         (center_id, first_name, last_name, active, enrolled_subjects, schedule_days, parent_phone, student_number, registered_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (center_id, first_name, last_name, active, enrolled_subjects, schedule_days, parent_phone, student_number, date_of_birth, registered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     const touchedIds = [];
@@ -348,6 +420,7 @@ export async function importRosterFromContent(
             hasDaysColumn,
             hasActiveColumn,
             hasStudentNumberColumn: hasStudentNumberColumn && row.hasStudentNumberValue,
+            hasDobValue: row.hasDobValue,
           })
         );
         const params = [];
@@ -357,6 +430,7 @@ export async function importRosterFromContent(
         if (hasStudentNumberColumn && row.hasStudentNumberValue) {
           params.push(row.student_number);
         }
+        if (row.hasDobValue) params.push(row.date_of_birth);
         params.push(row.parent_phone, existing.id, centerId);
         await updateStudent.run(...params);
         summary.updated++;
@@ -371,6 +445,7 @@ export async function importRosterFromContent(
           row.schedule_days,
           row.parent_phone || null,
           row.student_number,
+          row.date_of_birth,
           sqlNow()
         );
         summary.created++;
@@ -411,6 +486,7 @@ export async function importRosterFromContent(
       hasActiveColumn,
       hasPhoneColumn,
       hasStudentNumberColumn,
+      hasDobColumn,
     },
   };
 }

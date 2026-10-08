@@ -22,6 +22,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
+import CakeOutlinedIcon from '@mui/icons-material/CakeOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { useTranslation } from 'react-i18next';
 import { api, formatDuration, formatTime } from '../api';
@@ -77,6 +78,18 @@ function formatShortTime(isoString, timezone) {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+  });
+}
+
+/** Month+day for desk birthday list (no year — keeps the card scannable). */
+function formatBirthdayLabel(dateOfBirth, timezone) {
+  if (!dateOfBirth || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return '—';
+  const [y, m, d] = dateOfBirth.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  return dt.toLocaleDateString('en-US', {
+    timeZone: timezone || 'UTC',
+    month: 'short',
+    day: 'numeric',
   });
 }
 
@@ -330,6 +343,7 @@ export default function DeskPage() {
   const [tick, setTick] = useState(0);
   const [absent, setAbsent] = useState(null);
   const [absentLoading, setAbsentLoading] = useState(false);
+  const [birthdays, setBirthdays] = useState(null);
   const [clockSkewMs, setClockSkewMs] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
@@ -382,17 +396,19 @@ export default function DeskPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [studentsData, presentData, completedData, remoteData] = await Promise.all([
+      const [studentsData, presentData, completedData, remoteData, birthdaysData] = await Promise.all([
         api.getStudents(),
         api.getPresent(),
         api.getCompletedToday(),
         // Mode indicator only; never block the desk if this lookup fails.
         api.getOpenRemoteSessions().catch(() => ({ session_ids: [] })),
+        api.getBirthdaysThisMonth().catch(() => null),
       ]);
       setStudents(studentsData);
       setPresent(presentData);
       setCompleted(completedData);
       setRemoteSessionIds(new Set(remoteData.session_ids || []));
+      if (birthdaysData) setBirthdays(birthdaysData);
       if (presentData?.clock_iso) {
         const serverMs = new Date(presentData.clock_iso).getTime();
         if (!Number.isNaN(serverMs)) {
@@ -724,6 +740,74 @@ export default function DeskPage() {
         <Typography variant="bodyMedium" role="alert" sx={{ color: md3Colors.error, mb: 2 }}>
           {error}
         </Typography>
+      )}
+
+      {birthdays?.count > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 2,
+            px: 1.25,
+            py: 0.75,
+            borderRadius: `${shape.medium}px`,
+            bgcolor: getElevatedSurface(1),
+            minHeight: 36,
+            overflow: 'hidden',
+          }}
+          aria-label="Birthdays this month"
+        >
+          <CakeOutlinedIcon
+            sx={{ fontSize: 16, color: md3Colors.primary, flexShrink: 0 }}
+            aria-hidden
+          />
+          <Typography
+            variant="labelLarge"
+            sx={{
+              color: md3Colors.onSurfaceVariant,
+              flexShrink: 0,
+              fontSize: 12,
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Birthdays
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              minWidth: 0,
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': { display: 'none' },
+            }}
+          >
+            {birthdays.students.map((student) => (
+              <Chip
+                key={student.id}
+                size="small"
+                label={
+                  student.is_today
+                    ? `${student.name} · Today`
+                    : `${student.name} · ${formatBirthdayLabel(student.date_of_birth, timezone)}`
+                }
+                sx={{
+                  height: 24,
+                  fontSize: 12,
+                  fontWeight: student.is_today ? 600 : 500,
+                  flexShrink: 0,
+                  bgcolor: student.is_today ? md3Colors.primary : md3Colors.surfaceVariant,
+                  color: student.is_today ? md3Colors.onPrimary : md3Colors.onSurfaceVariant,
+                  '& .MuiChip-label': { px: 1 },
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
       )}
 
       <Box
