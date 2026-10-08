@@ -191,6 +191,9 @@ export const api = {
   deactivateStudent: (id) =>
     request(`/students/${id}/deactivate`, { method: 'PATCH' }),
 
+  activateStudent: (id) =>
+    request(`/students/${id}/activate`, { method: 'PATCH' }),
+
 
   importRoster: ({ filename, content, format = 'text', mode = 'merge', confirm_replace = false }) =>
     request('/admin/roster-import', {

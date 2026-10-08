@@ -833,6 +833,7 @@ export default function AdminPage() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [editStudentOpen, setEditStudentOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [activating, setActivating] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [rosterQuery, setRosterQuery] = useState('');
   const [showInactive, setShowInactive] = useState(false);
@@ -933,6 +934,26 @@ export default function AdminPage() {
       await loadData();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function handleActivate(student) {
+    if (!student || activating) return;
+    setActivating(true);
+    setError(null);
+    try {
+      const updated = await api.activateStudent(student.id);
+      setSelectedStudent((prev) =>
+        prev?.id === student.id ? { ...prev, ...updated, stats: prev.stats } : prev
+      );
+      setStudents((prev) =>
+        prev.map((s) => (s.id === updated.id ? { ...s, ...updated, stats: s.stats } : s))
+      );
+      showSnackbar(`${updated.name} is active`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActivating(false);
     }
   }
 
@@ -1460,7 +1481,7 @@ export default function AdminPage() {
               <Divider sx={{ mb: 3, borderColor: md3Colors.outlineVariant }} />
 
               <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                {selectedStudent.active && (
+                {selectedStudent.active ? (
                   <>
                     <Button
                       variant="contained"
@@ -1481,6 +1502,14 @@ export default function AdminPage() {
                       Deactivate
                     </Button>
                   </>
+                ) : (
+                  <Button
+                    variant="contained"
+                    disabled={activating}
+                    onClick={() => handleActivate(selectedStudent)}
+                  >
+                    {activating ? 'Making active...' : 'Make active'}
+                  </Button>
                 )}
               </Box>
 

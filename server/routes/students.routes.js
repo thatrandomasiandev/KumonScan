@@ -305,6 +305,26 @@ router.patch('/students/:id/deactivate', requireAdmin, requireRole('manager'), a
   res.json({ message: 'Student deactivated', id: student.id });
 });
 
+router.patch('/students/:id/activate', requireAdmin, requireRole('manager'), async (req, res) => {
+  const student = await db
+    .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
+    .get(req.params.id, req.center.id);
+
+  if (!student) {
+    return res.status(404).json({ error: 'Student not found' });
+  }
+
+  await db
+    .prepare('UPDATE students SET active = 1 WHERE id = ? AND center_id = ?')
+    .run(req.params.id, req.center.id);
+
+  const updated = await db
+    .prepare('SELECT * FROM students WHERE id = ? AND center_id = ?')
+    .get(student.id, req.center.id);
+
+  res.json(serializeStudent(updated));
+});
+
 /**
  * Students scheduled for the given date who never checked in.
  * Query: ?date=YYYY-MM-DD (defaults to center today).
